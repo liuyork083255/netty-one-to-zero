@@ -38,8 +38,8 @@ import java.util.Set;
  *      选择密钥集不是线程安全的。
  *
  *  {@link Selector#selectNow()}
- *      选择一组键，其对应的通道已准备好进行I/O操作。
- *      此方法执行非阻塞选择操作。如果自上一个选择操作以来没有通道可选，则此方法立即返回零。
+ *      选择对应的通道已准备好进行I/O操作。
+ *      此方法执行非阻塞操作。如果没有通道可选，则此方法立即返回零。
  *      调用此方法将清除以前对wakeup方法的任何调用的效果
  *
  *  {@link Selector#select(long)}
@@ -58,6 +58,15 @@ import java.util.Set;
  *
  *
  *  {@link Selector#wakeup()}
+ *      select()方法会阻塞，唤醒有三种方式
+ *      1 有就绪的IO事件
+ *      2 当前执行的线程被 interrupt    如果外部通过这种方式唤醒线程，那么netty会以为遇到了 空轮训 bug
+ *      3 调用了wakeup方法     netty 就是通过 wakeup 方法来唤醒线程的，而不是使用 interrupt
+ *      4 调用 select(long time) 时间到了会自动唤醒
+ *      Note：
+ *          需要注意的地方就是当我们先调用 selector.wakeup 方法，下一步执行 selector 阻塞方法就会立马返回不会阻塞。
+ *          但是如果我们在调用阻塞方法前调用了 selectNow 这个方法会清除 wakeup 的影响，从而我们下面再调用阻塞方法也不会被唤醒，
+ *          除非我们在调用一次wakeup方法。
  *
  *  {@link Selector#close()}
  *

@@ -187,6 +187,15 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
      * {@link LinkedBlockingQueue} but if your sub-class of {@link SingleThreadEventExecutor} will not do any blocking
      * calls on the this {@link Queue} it may make sense to {@code @Override} this and return some more performant
      * implementation that does not support blocking operations at all.
+     *
+     * one-to-zero:
+     * 默认返回一个阻塞的队列，但是这个方法可能会被覆盖，如果调用者在子类中复写了这个方法
+     * 那么返回的队列可能是非阻塞的
+     *
+     * netty中的 NioEventLoop 实现了这个类并且重写了这个方法
+     * 可以好好看下这个链接：
+     *  https://www.jianshu.com/p/c7ef93e65832
+     *
      */
     protected Queue<Runnable> newTaskQueue(int maxPendingTasks) {
         return new LinkedBlockingQueue<Runnable>(maxPendingTasks);

@@ -27,6 +27,10 @@ final class DefaultSelectStrategy implements SelectStrategy {
 
     @Override
     public int calculateStrategy(IntSupplier selectSupplier, boolean hasTasks) throws Exception {
+        /**
+         * one-to-zero:
+         *  {@link io.netty.channel.nio.NioEventLoop#selectNowSupplier}实现了 IntSupplier，成员变量就直接实现，调用 selector.selectNow()
+         */
         return hasTasks ? selectSupplier.get() : SelectStrategy.SELECT;
     }
 }

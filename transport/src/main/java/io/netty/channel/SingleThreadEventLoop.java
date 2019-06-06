@@ -29,12 +29,30 @@ import java.util.concurrent.ThreadFactory;
 /**
  * Abstract base class for {@link EventLoop}s that execute all its submitted tasks in a single thread.
  *
+ * one-to-zero:
+ * 职责：
+ *  成员变量：主要是定义 nio 中的 tailTasks 任务队列，
+ *      目前还不晓得和 {@link SingleThreadEventExecutor#taskQueue} 的区别 ？？？
+ *      netty要执行的任务task其实有三个
+ *          1 定时任务队列（scheduledTaskQueue）
+ *          2 常规任务队列（taskQueue）
+ *          3 后置队列（tailTasks）
+ *
  */
 public abstract class SingleThreadEventLoop extends SingleThreadEventExecutor implements EventLoop {
 
+    /**
+     * one-to-zero:
+     * nio线程执行任务都是将之放在队列中，这里是定义队列的大小
+     * 默认是 integer 最大值
+     */
     protected static final int DEFAULT_MAX_PENDING_TASKS = Math.max(16,
             SystemPropertyUtil.getInt("io.netty.eventLoop.maxPendingTasks", Integer.MAX_VALUE));
 
+    /**
+     * one-to-zero:
+     * 这个不是nio任务队列，真正的任务队列在 {@link SingleThreadEventExecutor#taskQueue}
+     */
     private final Queue<Runnable> tailTasks;
 
     protected SingleThreadEventLoop(EventLoopGroup parent, ThreadFactory threadFactory, boolean addTaskWakesUp) {

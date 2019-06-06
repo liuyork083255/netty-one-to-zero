@@ -21,6 +21,17 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
+/**
+ * one-to-zero:
+ *  这个对象应该就是优化 selectKey 了
+ *      netty 通过反射把Selector的实现类中两个属性selectedKeys（就绪key集合）
+ *      和 publicSelectedKeys（给外部访问就绪io事件的集合）从hashSet替换数组。
+ * 优化原因：
+ *      首先当netty发现有io事件就绪就会把selectionKey塞入上述set集合，如果采用set，那么当io事件变多导致hash冲突进而形成链表，那么我们add操作就不是常数复杂度
+ * 数组优势：
+ *      如果采用数组我们不仅省去了计算hash的事件也不会存在因为要把key插入链表需要迭代，直接插入数组尾部即可。插入操作的复杂度永远是常数范围。
+ *
+ */
 final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
 
     SelectionKey[] keys;
@@ -93,6 +104,10 @@ final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
         size = 0;
     }
 
+    /**
+     * one-to-zero:
+     * 使用数据就必然要考虑扩容
+     */
     private void increaseCapacity() {
         SelectionKey[] newKeys = new SelectionKey[keys.length << 1];
         System.arraycopy(keys, 0, newKeys, 0, size);

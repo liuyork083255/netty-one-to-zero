@@ -22,19 +22,33 @@ import io.netty.util.IntSupplier;
  *
  * Provides the ability to control the behavior of the select loop. For example a blocking select
  * operation can be delayed or skipped entirely if there are events to process immediately.
+ *
+ * one-to-zero:
+ *  事件选择器，和线程选择器区别开{@link io.netty.util.concurrent.EventExecutorChooserFactory}，后者是选择线程
+ *  前者主要是循环事件的选择
+ *
+ *
+ *
+ *
+ *
  */
 public interface SelectStrategy {
 
     /**
      * Indicates a blocking select should follow.
+     * one-to-zero:
+     *  明要轮询新事件而不阻塞的IO循环
      */
     int SELECT = -1;
     /**
      * Indicates the IO loop should be retried, no blocking select to follow directly.
      */
-    int CONTINUE = -2;
+    int CONTINUE = -2;//one-to-zero:如果没有选择操作阻塞，预示着应该重试IO事件循环，处理IO事件
     /**
      * Indicates the IO loop to poll for new events without blocking.
+     * one-to-zero:
+     *  表明要轮询新事件而不阻塞的IO循环。
+     *  这个状态其实没有用，在 NioEventLoop中使用了，switch操作，如果是这个状态直接进入 {@link this#SELECT} 分支
      */
     int BUSY_WAIT = -3;
 
