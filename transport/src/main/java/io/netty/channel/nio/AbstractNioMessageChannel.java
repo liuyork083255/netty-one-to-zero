@@ -72,10 +72,18 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
             try {
                 try {
                     do {
+                        /**
+                         * 这个方法是多态实现，
+                         *  1 如果是新连接接入，则会执行 {@link io.netty.channel.socket.nio.NioServerSocketChannel#doReadMessages(List)}
+                         *
+                         *
+                         *
+                         */
                         int localRead = doReadMessages(readBuf);
                         if (localRead == 0) {
                             break;
                         }
+                        System.out.println("========================由于重复代码所以自己加一点防止警告线=========================");
                         if (localRead < 0) {
                             closed = true;
                             break;

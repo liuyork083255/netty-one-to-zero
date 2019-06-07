@@ -151,6 +151,9 @@ public abstract class SingleThreadEventLoop extends SingleThreadEventExecutor im
         return !(task instanceof NonWakeupRunnable);
     }
 
+    /**
+     * 执行所有 tailTasks 中的任务
+     */
     @Override
     protected void afterRunningAllTasks() {
         runAllTasksFrom(tailTasks);

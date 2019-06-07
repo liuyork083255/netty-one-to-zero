@@ -85,7 +85,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     /**
      * one-to-zero:
      * 默认对 selector 的 selectedKeys 进行了优化，可以通过 io.netty.noKeySetOptimization 开关决定是否开启优化功能
-     * 默认不打开
+     * 默认是优化打开
      */
     private static final boolean DISABLE_KEY_SET_OPTIMIZATION =
             SystemPropertyUtil.getBoolean("io.netty.noKeySetOptimization", false);
@@ -196,6 +196,8 @@ public final class NioEventLoop extends SingleThreadEventLoop {
      *  这不是绝对的：
      *      只能是大致限制比，如我们限制3秒钟，那么我们执行到第二个任务才2秒，那netty会继续执行，
      *      但是第二个任务耗时4秒，则其一共执行的时间就会超过之前的3秒。
+     *
+     *  如果IO操作多于定时任务和task，可以将该值调大，该值越大，task分的时间就越少
      */
     private volatile int ioRatio = 50;//one-to-zero: Nio处理Io事件的时间占比，以便可以处理器其他非IO事件
     private int cancelledKeys;//one-to-zero: 取消选择key计数器
@@ -632,6 +634,17 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                         processSelectedKeys();
                     } finally {
                         // Ensure we always run tasks.
+                        /**
+                         * one-to-zero:
+                         *  处理完IO事件后，就会处理任务 task，默认情况下，执行任务会设置一个时间，不会让其一直执行，
+                         *  防止影响IO事件一直处于长时间等待
+                         *
+                         *  task执行的时间是根据 本次IO操作的执行时间计算得来
+                         *  IO执行的越久，那么 ioTime 就越大，计算式 ioTime * (100 - ioRatio) / ioRatio 就越大
+                         *  e.g.
+                         *      如果 {@link this#ioRatio} 等于50，说明IO执行多久时间，那么 task就应该多久时间
+                         *
+                         */
                         final long ioTime = System.nanoTime() - ioStartTime;
                         runAllTasks(ioTime * (100 - ioRatio) / ioRatio);
                     }
@@ -681,9 +694,9 @@ public final class NioEventLoop extends SingleThreadEventLoop {
      */
     private void processSelectedKeys() {
         if (selectedKeys != null) {
-            processSelectedKeysOptimized();
+            processSelectedKeysOptimized(); // 开启优化则会进入该分支
         } else {
-            processSelectedKeysPlain(selector.selectedKeys());
+            processSelectedKeysPlain(selector.selectedKeys());// 未开启优化则进入该分支
         }
     }
 
@@ -733,9 +746,18 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             final Object a = k.attachment();
             i.remove();
 
+            /*
+             * one-to-zero:
+             *  如果是 AbstractNioChannel 类型，说明它是 NioServerSocketChannel 或者是 NioSocketChannel
+             *  需要进行IO读写相关操作
+             */
             if (a instanceof AbstractNioChannel) {
                 processSelectedKey(k, (AbstractNioChannel) a);
             } else {
+                /*
+                 * 不是 AbstractNioChannel 类型说明是 NioTask
+                 * 由于 netty 自身没有实现这个接口，说以通常情况下不会执行该分支，除非用户自行注册该 Task 到多路复用器
+                 */
                 @SuppressWarnings("unchecked")
                 NioTask<SelectableChannel> task = (NioTask<SelectableChannel>) a;
                 processSelectedKey(k, task);
@@ -769,8 +791,17 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             final Object a = k.attachment();
 
             if (a instanceof AbstractNioChannel) {
+                /*
+                 * one-to-zero:
+                 *  如果是 AbstractNioChannel 类型，说明它是 NioServerSocketChannel 或者是 NioSocketChannel
+                 *  需要进行IO读写相关操作
+                 */
                 processSelectedKey(k, (AbstractNioChannel) a);
             } else {
+                /*
+                 * 不是 AbstractNioChannel 类型说明是 NioTask
+                 * 由于 netty 自身没有实现这个接口，说以通常情况下不会执行该分支，除非用户自行注册该 Task 到多路复用器
+                 */
                 @SuppressWarnings("unchecked")
                 NioTask<SelectableChannel> task = (NioTask<SelectableChannel>) a;
                 processSelectedKey(k, task);
@@ -788,7 +819,15 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     }
 
     private void processSelectedKey(SelectionKey k, AbstractNioChannel ch) {
+        /**
+         * one-to-zero:
+         *  如果是注册事件，那么这个 channel 是 NioServerSocketChannel，因为是发生在 boss 上的 selector
+         *  如果是读事件，那么这个 channel 是 NioSocketChannel，因为是发生在 worker 上的 selector
+         *
+         *
+         */
         final AbstractNioChannel.NioUnsafe unsafe = ch.unsafe();
+        /* 如果这个键是不可用的，那么需要关闭 */
         if (!k.isValid()) {
             final EventLoop eventLoop;
             try {
@@ -825,6 +864,9 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                 unsafe.finishConnect();
             }
 
+            /**
+             *  如果是写操作，则说明有半包消息尚未发送完成，需要继续使用flush方法进行发送
+             */
             // Process OP_WRITE first as we may be able to write some queued buffers and so free memory.
             if ((readyOps & SelectionKey.OP_WRITE) != 0) {
                 // Call forceFlush which will also take care of clear the OP_WRITE once there is nothing left to write
@@ -833,6 +875,12 @@ public final class NioEventLoop extends SingleThreadEventLoop {
 
             // Also check for readOps of 0 to workaround possible JDK bug which may otherwise lead
             // to a spin loop
+            /**
+             * one-to-zero:
+             *  unsafe的实现主要是 NioServerSocketChannel 和 NioSocketChannel 实现
+             *  如果是 NioServerSocketChannel 实现，那么新连接接入会进入 {@link AbstractNioMessageChannel} 类中的 NioMessageUnsafe#read
+             *  如果是 NioSocketChannel 实现，那么新连接接入会进入 {@link AbstractNioByteChannel} 类中的 NioByteUnsafe#read
+             */
             if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0 || readyOps == 0) {
                 unsafe.read();
             }
@@ -931,7 +979,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             for (;;) {
                 /**
                  * one-to-zero:
-                 * 计算select操作自动唤醒时间
+                 * 计算select操作自动唤醒时间 默认就是 1000，也就是最多阻塞自己 1 秒
                  */
                 long timeoutMillis = (selectDeadLineNanos - currentTimeNanos + 500000L) / 1000000L;
                 if (timeoutMillis <= 0) {

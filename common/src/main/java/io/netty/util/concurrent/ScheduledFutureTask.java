@@ -30,6 +30,9 @@ final class ScheduledFutureTask<V> extends PromiseTask<V> implements ScheduledFu
     private static final AtomicLong nextTaskId = new AtomicLong();
     private static final long START_TIME = System.nanoTime();
 
+    /**
+     * 获取程序启动到当前的时间间隔
+     */
     static long nanoTime() {
         return System.nanoTime() - START_TIME;
     }

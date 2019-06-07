@@ -102,11 +102,19 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
         assert inEventLoop();
 
         Queue<ScheduledFutureTask<?>> scheduledTaskQueue = this.scheduledTaskQueue;
+
+        /* 从任务队列中获取第一个任务 */
         ScheduledFutureTask<?> scheduledTask = scheduledTaskQueue == null ? null : scheduledTaskQueue.peek();
         if (scheduledTask == null) {
             return null;
         }
 
+        /**
+         * 首先需要知道，定时任务需要自己维护自己任务的过期时间
+         * nanoTime 根据进入这个方法可以知道，参数 nanoTime 就是程序启动的那一刻到当前运行的时间
+         * 所以 scheduledTask.deadlineNanos() 其实就是应该执行的时间，如果小于 nanoTime，那么说明已经超时或者正在超时
+         * 那么就应该将这个任务拿出来，并且从 scheduledTaskQueue 中删除
+         */
         if (scheduledTask.deadlineNanos() <= nanoTime) {
             scheduledTaskQueue.remove();
             return scheduledTask;

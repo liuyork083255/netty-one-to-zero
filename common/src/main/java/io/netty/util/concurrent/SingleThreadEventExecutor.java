@@ -215,6 +215,11 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     /**
      * @see Queue#poll()
+     * one-to-zero:
+     *  获取 taskQueue 中一个任务
+     *  Note：
+     *      taskQueue 中的任务有自身的，也有 scheduleTaskQueue 中转过来的
+     *
      */
     protected Runnable pollTask() {
         assert inEventLoop();
@@ -287,10 +292,31 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         }
     }
 
+    /**
+     * one-to-zero:
+     *  这个方法就是从定时任务队列中获取所有 超时或者正在超时 的任务，并且放入 task queue 中
+     */
     private boolean fetchFromScheduledTaskQueue() {
+        /**
+         * one-to-zero:
+         *  这个 nanoTime 时间就是从程序启动到当前运行时刻的时间间隔
+         */
         long nanoTime = AbstractScheduledEventExecutor.nanoTime();
+
+        /**
+         * one-to-zero:
+         *  根据 nanoTime 时间，计算 scheduledTaskQueue 中的任务哪一个已经处于超时或者正在超时
+         *  然后拿出来放在 task queue 中
+         */
         Runnable scheduledTask  = pollScheduledTask(nanoTime);
         while (scheduledTask != null) {
+            /**
+             * one-to-zero:
+             *  将任务添加到 task 队列中，如果添加是失败，说明 taskQueue 队列满了，然后将这个定时任务又放回 scheduledTaskQueue 中
+             *  那么只能下一次被选择执行了
+             *
+             *  调用 offer 方法不会阻塞
+             */
             if (!taskQueue.offer(scheduledTask)) {
                 // No space left in the task queue add it back to the scheduledTaskQueue so we pick it up again.
                 scheduledTaskQueue().add((ScheduledFutureTask<?>) scheduledTask);
@@ -372,11 +398,16 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
             if (runAllTasksFrom(taskQueue)) {
                 ranAtLeastOne = true;
             }
+            /* 再执行过程中，很有可能又有任务超时了，所以在判断一次 */
         } while (!fetchedAll); // keep on processing until we fetched all scheduled tasks.
 
         if (ranAtLeastOne) {
             lastExecutionTime = ScheduledFutureTask.nanoTime();
         }
+        /**
+         * 执行 tailTasks 中的任务
+         * 见 SingleThreadEventLoop#afterRunningAllTasks()
+         */
         afterRunningAllTasks();
         return ranAtLeastOne;
     }
@@ -387,8 +418,13 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
      * @param taskQueue To poll and execute all tasks.
      *
      * @return {@code true} if at least one task was executed.
+     *
+     * one-to-zero:
+     *  逐个执行队列中的任务，谁调用这个方法谁负责执行，因为使用的是 .run()
+     *
      */
     protected final boolean runAllTasksFrom(Queue<Runnable> taskQueue) {
+        /* 弹出一个任务出来 */
         Runnable task = pollTaskFrom(taskQueue);
         if (task == null) {
             return false;
@@ -405,9 +441,27 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     /**
      * Poll all tasks from the task queue and run them via {@link Runnable#run()} method.  This method stops running
      * the tasks in the task queue and returns if it ran longer than {@code timeoutNanos}.
+     *
+     * one-to-zero:
+     *  参数 timeoutNanos 是执行时间片
+     *
      */
     protected boolean runAllTasks(long timeoutNanos) {
+        /**
+         * one-to-zero:
+         *  这个方法就是从定时任务队列中获取 超时或者正在超时 的任务，并且放入 task queue 中
+         */
         fetchFromScheduledTaskQueue();
+
+        /**
+         * one-to-zero:
+         *  从 task queue 获取一个任务
+         *  我们知道 netty 任务 task 中有三类，其中一类就是 {@link io.netty.channel.SingleThreadEventLoop}的 tailTasks
+         *  含义就是在任务最后执行
+         *  如果这里 task queue 中没有任务则需要执行 所有尾部任务
+         *  Note：尾部任务是不受时间片限制的
+         *
+         */
         Runnable task = pollTask();
         if (task == null) {
             afterRunningAllTasks();
@@ -424,6 +478,15 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
             // Check timeout every 64 tasks because nanoTime() is relatively expensive.
             // XXX: Hard-coded value - will make it configurable if it is really a problem.
+            /**
+             * one-to-zero:
+             *  可以看出，其实这里计算时间片非常不准
+             *  1 一个任务很有可能是超时时间片的
+             *  2 64 个任务之后才判断一次，那如果每一个任务都超过时间片呢？  可能 netty 假设每个任务都非常快吧
+             *
+             *  Note：
+             *      之所以说 64 才判断一次，因为上面原始注解说的很明白了，就是 系统获取当前纳秒 nanoTime() 相对比较昂贵
+             */
             if ((runTasks & 0x3F) == 0) {
                 lastExecutionTime = ScheduledFutureTask.nanoTime();
                 if (lastExecutionTime >= deadline) {
