@@ -73,6 +73,13 @@ import java.net.SocketAddress;
  * It is important to call {@link #close()} or {@link #close(ChannelPromise)} to release all
  * resources once you are done with the {@link Channel}. This ensures all resources are
  * released in a proper way, i.e. filehandles.
+ *
+ * one-to-zero:
+ *  关于 Channel 的所有 IO 操作都是异步的
+ *      客户端 channel 实现 {@link io.netty.channel.socket.nio.NioSocketChannel} 其实就是 bootStrap.channel(NioSocketChannel.class) 指定的
+ *      服务端 channel 实现 {@link io.netty.channel.socket.nio.NioServerSocketChannel} 其实就是 bootStrap.channel(NioServerSocketChannel.class) 指定的
+ *
+ *
  */
 public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparable<Channel> {
 

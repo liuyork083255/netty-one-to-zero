@@ -212,6 +212,23 @@ import java.util.NoSuchElementException;
  * A {@link ChannelHandler} can be added or removed at any time because a {@link ChannelPipeline} is thread safe.
  * For example, you can insert an encryption handler when sensitive information is about to be exchanged, and remove it
  * after the exchange.
+ *
+ *
+ * one-to-zero:
+ *  默认实现 {@link io.netty.channel.DefaultChannelPipeline}
+ *  ChannelPipeline 可以随意添加 handler， 因为 addXxx 这些方法都是安全的，都是通过 synchronize 实现
+ *
+ *  而 ChannelPipeline 与 handler 和 ChannelHandlerContext 的关系详见 {@link io.netty.channel.ChannelHandlerContext}
+ *
+ *  每一个连接 channel 都有与之对应的 ChannelPipeline，因为
+ *  channel 被创建，则对应的 ChannelPipeline 就被创建，channel 里面定义了 pipeline 成员变量
+ *  pipeline 是在抽象类中 {@link AbstractChannel} 被定义，
+ *  并且 {@link io.netty.channel.socket.nio.NioServerSocketChannel} 和 {@link  io.netty.channel.socket.nio.NioSocketChannel} 都继承于 {@link AbstractChannel}
+ *
+ *
+ *
+ *
+ *
  */
 public interface ChannelPipeline
         extends ChannelInboundInvoker, ChannelOutboundInvoker, Iterable<Entry<String, ChannelHandler>> {

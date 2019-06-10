@@ -468,6 +468,11 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
             return false;
         }
 
+        /**
+         * one-to-zero:
+         *  简单测试了几下，在不考虑用户提交的任务情况下，发现都是在启动的时候或者在新建连接的时候才会有任务
+         *  因为那个时候线程都是没有没有启动的，都是以任务提交方式来启动的
+         */
         final long deadline = ScheduledFutureTask.nanoTime() + timeoutNanos;
         long runTasks = 0;
         long lastExecutionTime;

@@ -97,6 +97,13 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      * The {@link Class} which is used to create {@link Channel} instances from.
      * You either use this or {@link #channelFactory(io.netty.channel.ChannelFactory)} if your
      * {@link Channel} implementation has no no-args constructor.
+     *
+     * one-to-zero:
+     *  通过给定一个 class 类型创建一个工厂，这个工厂就是用于创建 channel
+     *  给定的是什么类型的 channel，那么真实的连接 channel 就是什么类型
+     *  比如客户端：bootStrap.channel(NioSocketChannel.class)
+     *  比如服务端：bootStrap.channel(NioServerSocketChannel.class)
+     *
      */
     public B channel(Class<? extends C> channelClass) {
         return channelFactory(new ReflectiveChannelFactory<C>(
@@ -114,6 +121,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             throw new IllegalStateException("channelFactory set already");
         }
 
+        /* 给工厂赋值 */
         this.channelFactory = channelFactory;
         return self();
     }
@@ -162,6 +170,13 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     /**
      * Allow to specify a {@link ChannelOption} which is used for the {@link Channel} instances once they got
      * created. Use a value of {@code null} to remove a previous set {@link ChannelOption}.
+     *
+     * one-to-zero:
+     *  option 主要是设置一些网络底层参数 具体可以参考 {@link ChannelOption}
+     *  和 attributeMap 不同，后者主要用于存放业务数据，然后在多个 handler 可以共享
+     *
+     *  option 设置可以根据 boss 和 worker 两个 selector 指定不同的参数
+     *  如果是设置 worker 的 option ，则调用其子类 {@link ServerBootstrap#childOption(ChannelOption, Object)}
      */
     public <T> B option(ChannelOption<T> option, T value) {
         ObjectUtil.checkNotNull(option, "option");
@@ -268,6 +283,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     }
 
     private ChannelFuture doBind(final SocketAddress localAddress) {
+        /* 初始化和创建 channel */
         final ChannelFuture regFuture = initAndRegister();
         final Channel channel = regFuture.channel();
         if (regFuture.cause() != null) {
@@ -306,7 +322,15 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     final ChannelFuture initAndRegister() {
         Channel channel = null;
         try {
+            /**
+             * 启动 BootStrap 的时候使用的什么类型 channel，那么这里就是创建什么样的 channel
+             *  客户端：bootStrap.channel(NioSocketChannel.class)
+             *  服务端：bootStrap.channel(NioServerSocketChannel.class)
+             */
             channel = channelFactory.newChannel();
+
+
+
             init(channel);
         } catch (Throwable t) {
             if (channel != null) {
@@ -319,6 +343,14 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             return new DefaultChannelPromise(new FailedChannel(), GlobalEventExecutor.INSTANCE).setFailure(t);
         }
 
+        /**
+         * one-to-zero:
+         *  config() 方法其实就是对应 ServerBootstrap 的 group 属性引用
+         *  可以根据这个方法层层网上追踪，最终会到 {@link AbstractBootstrapConfig#group()}方法，调用 bootstrap.group()，这个方法又是抽象的，唯一一个实现就是 {@link this#group()} [饶了大半天]
+         *  而 group 其实就是对应的线程组，在这里 group 就是对应的 boss 线程组
+         *
+         *
+         */
         ChannelFuture regFuture = config().group().register(channel);
         if (regFuture.cause() != null) {
             if (channel.isRegistered()) {

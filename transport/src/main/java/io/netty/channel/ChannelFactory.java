@@ -17,6 +17,11 @@ package io.netty.channel;
 
 /**
  * Creates a new {@link Channel}.
+ *
+ * one-to-zero:
+ *  作用仅仅是创建 channel
+ *  其实现是 {@link io.netty.channel.ReflectiveChannelFactory}
+ *
  */
 @SuppressWarnings({ "ClassNameSameAsAncestorName", "deprecation" })
 public interface ChannelFactory<T extends Channel> extends io.netty.bootstrap.ChannelFactory<T> {

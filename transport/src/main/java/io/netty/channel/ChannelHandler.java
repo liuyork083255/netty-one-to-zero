@@ -174,6 +174,23 @@ import java.lang.annotation.Target;
  * {@link ChannelPipeline} to find out more about inbound and outbound operations,
  * what fundamental differences they have, how they flow in a  pipeline,  and how to handle
  * the operation in your application.
+ *
+ * one-to-zero:
+ * 主要是解释上面的注解
+ *  1 该接口实现类作用：处理I/O事件或拦截I/O操作，并将其转发到其ChannelPipeline中的下一个处理程序。
+ *  2 该接口的实现类主要是 ChannelInboundHandler 和 ChannelOutboundHandler ，但是实际使用中用的最多的还是
+ *      ChannelInboundHandlerAdapter    单向入，用的最多的还是 {@link SimpleChannelInboundHandler}
+ *      ChannelOutboundHandlerAdapter   单向出
+ *     {@link io.netty.channel.ChannelDuplexHandler}    双向
+ *  3 强调了 handler 应该和 pipeLine 打交道
+ *      通过 pipeLine 将数据传递给下一个 handler
+ *      通过 pipeLine 实现动态 增|删 handler
+ *      通过 pipeLine 获取 AttributeKeys 存储数据信息
+ *  4 介绍了注解 Sharable 作用
+ *
+ *
+ *  而 ChannelHandler 与 ChannelPipeline 和 ChannelHandlerContext 的关系详见 {@link io.netty.channel.ChannelHandlerContext}
+ *
  */
 public interface ChannelHandler {
 

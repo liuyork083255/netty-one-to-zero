@@ -48,6 +48,10 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
     private final Map<ChannelOption<?>, Object> childOptions = new LinkedHashMap<ChannelOption<?>, Object>();
     private final Map<AttributeKey<?>, Object> childAttrs = new LinkedHashMap<AttributeKey<?>, Object>();
     private final ServerBootstrapConfig config = new ServerBootstrapConfig(this);
+    /**
+     * one-to-zero;
+     *  boss group 在父类 {@link AbstractBootstrap#group} 中
+     */
     private volatile EventLoopGroup childGroup;
     private volatile ChannelHandler childHandler;
 
@@ -92,9 +96,19 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
      * Allow to specify a {@link ChannelOption} which is used for the {@link Channel} instances once they get created
      * (after the acceptor accepted the {@link Channel}). Use a value of {@code null} to remove a previous set
      * {@link ChannelOption}.
+     *
+     * one-to-zero:
+     *  option 主要是设置一些网络底层参数 具体可以参考 {@link ChannelOption}
+     *  和 attributeMap 不同，后者主要用于存放业务数据，然后在多个 handler 可以共享
+     *
+     *  option 设置可以根据 boss 和 worker 两个 selector 指定不同的参数
+     *  如果是设置 boss 的 option ，则调用其父类 {@link this#option(ChannelOption, Object)}
+     *
      */
     public <T> ServerBootstrap childOption(ChannelOption<T> childOption, T value) {
         ObjectUtil.checkNotNull(childOption, "childOption");
+
+        /* 如果设置了参数，后期需要删除，那么可以直接重新设置一次，value 指定为 null 即可 */
         if (value == null) {
             synchronized (childOptions) {
                 childOptions.remove(childOption);
@@ -110,6 +124,12 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
     /**
      * Set the specific {@link AttributeKey} with the given value on every child {@link Channel}. If the value is
      * {@code null} the {@link AttributeKey} is removed
+     *
+     * one-to-zero:
+     *  在每个子通道上使用给定的值设置特定的 AttributeKey
+     *
+     *  和 option 一样，attribute 也分为 boss 和 worker，boss 对应的方法是父类 {@link this#attr(AttributeKey, Object)}
+     *
      */
     public <T> ServerBootstrap childAttr(AttributeKey<T> childKey, T value) {
         ObjectUtil.checkNotNull(childKey, "childKey");
@@ -131,11 +151,23 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
     @Override
     void init(Channel channel) throws Exception {
+        /**
+         * one-to-zero:
+         * 为 channel 管道初始化 option 参数
+         */
         final Map<ChannelOption<?>, Object> options = options0();
         synchronized (options) {
             setChannelOptions(channel, options, logger);
         }
 
+        /**
+         * one-to-zero:
+         * 为 channel 管道初始化 attr 参数
+         * Note：
+         *  在 >= 4.1 版本中，Channel.attr == ChannelHandlerContext.attr
+         *  早期的 4.0 之前，每一个 ChannelHandlerContext 都会维护一个 attrMap
+         *
+         */
         final Map<AttributeKey<?>, Object> attrs = attrs0();
         synchronized (attrs) {
             for (Entry<AttributeKey<?>, Object> e: attrs.entrySet()) {
@@ -145,6 +177,10 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
             }
         }
 
+        /**
+         * one-to-zero:
+         * pipeline 是 channel 的成员变量，channel 被创建的时候就会默认创建 pipeline 的实现
+         */
         ChannelPipeline p = channel.pipeline();
 
         final EventLoopGroup currentChildGroup = childGroup;
@@ -244,6 +280,14 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
             }
 
             try {
+                /**
+                 * one-to-zero:
+                 *  1 进入 {@link io.netty.channel.MultithreadEventLoopGroup#register(Channel)}
+                 *
+                 *
+                 *
+                 *
+                 */
                 childGroup.register(child).addListener(new ChannelFutureListener() {
                     @Override
                     public void operationComplete(ChannelFuture future) throws Exception {

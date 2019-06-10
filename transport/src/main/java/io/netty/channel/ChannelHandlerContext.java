@@ -121,6 +121,26 @@ import java.nio.channels.Channels;
  * {@link ChannelPipeline} to find out more about inbound and outbound operations,
  * what fundamental differences they have, how they flow in a  pipeline,  and how to handle
  * the operation in your application.
+ *
+ *
+ * one-to-zero:
+ *  具体实现类是 {@link  io.netty.channel.AbstractChannelHandlerContext}，它是一个抽象类，但是里面有两个自身的实现
+ *  分别是 {@link  io.netty.channel.DefaultChannelPipeline.HeadContext} 和 {@link  io.netty.channel.DefaultChannelPipeline.TailContext}
+ *  但是这两个 context 是 netty 默认填在到 pipeLine 中的头和尾
+ *  我们添加的 handler 对应的 context 具体是 {@link  io.netty.channel.DefaultChannelHandlerContext}，每一个 DefaultChannelHandlerContext 都要维护一个 handler
+ *
+ * Note：
+ *  ChannelHandler ChannelPipeline ChannelHandlerContext 三者关系：
+ *  1 ChannelHandler 被包含于 ChannelPipeline 中，一个 ChannelPipeline 有多个 ChannelHandler
+ *  2 ChannelHandler 想要和 ChannelPipeline 交互，直接是不可能的，必须通过上下文 ChannelHandlerContext
+ *  3 ChannelHandlerContext 是被在调用 {@link  io.netty.channel.DefaultChannelPipeline#addLast} 这样方法的时候被创建
+ *  4 ChannelHandler 和 ChannelHandlerContext 不是一一对应，是一对多的关系，原因是 handler 可以被添加到不同的 ChannelPipeline 中(Sharable注解),所以才可以区分开。
+ *      每一个 {@link  io.netty.channel.DefaultChannelHandlerContext} 都会维护一个 handler，多个 context 可以是对应同一个 handler 对象
+ *
+ *
+ *
+ *
+ *
  */
 public interface ChannelHandlerContext extends AttributeMap, ChannelInboundInvoker, ChannelOutboundInvoker {
 

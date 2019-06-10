@@ -42,6 +42,12 @@ import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 /**
  * The default {@link ChannelPipeline} implementation.  It is usually created
  * by a {@link Channel} implementation when the {@link Channel} is created.
+ *
+ * one-to-zero:
+ *  channel 被创建，则对应的 ChannelPipeline 就被创建，因为 channel 里面定义了 pipeline 成员变量
+ *  pipeline 是在抽象类中 {@link AbstractChannel} 定义
+ *  并且 {@link io.netty.channel.socket.nio.NioServerSocketChannel} 和 {@link  io.netty.channel.socket.nio.NioSocketChannel} 都继承于 {@link AbstractChannel}
+ *
  */
 public class DefaultChannelPipeline implements ChannelPipeline {
 

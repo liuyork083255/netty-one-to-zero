@@ -123,6 +123,13 @@ public class ChannelOption<T> extends AbstractConstant<ChannelOption<T>> {
     public static final ChannelOption<Integer> IP_MULTICAST_TTL = valueOf("IP_MULTICAST_TTL");
     public static final ChannelOption<Boolean> IP_MULTICAST_LOOP_DISABLED = valueOf("IP_MULTICAST_LOOP_DISABLED");
 
+    /**
+     * one-to-zero:
+     *  一个比较有用的参数
+     *      serverBootstrap.childOption(ChannelOption.TCP_NODELAY, true);
+     *      TCP_NODELAY 表示不延迟，如果设置为true，那么服务端有数据达到 tcp 的滑动窗口，那么 tcp 就会发送数据
+     *      如果服务端要求不是低延迟的，那么可以设置为 false， 好处是底层的TCP为了能减少交互次数,会将网络数据积累到一定的数量后,服务器端才发送出去,会造成一定的延迟。
+     */
     public static final ChannelOption<Boolean> TCP_NODELAY = valueOf("TCP_NODELAY");
 
     @Deprecated

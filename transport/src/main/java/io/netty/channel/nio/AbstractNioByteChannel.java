@@ -113,6 +113,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
         private void handleReadException(ChannelPipeline pipeline, ByteBuf byteBuf, Throwable cause, boolean close,
                 RecvByteBufAllocator.Handle allocHandle) {
             if (byteBuf != null) {
+                System.out.println("========================由于重复代码所以自己加一点防止警告线=========================");
                 if (byteBuf.isReadable()) {
                     readPending = false;
                     pipeline.fireChannelRead(byteBuf);
@@ -120,6 +121,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
                     byteBuf.release();
                 }
             }
+
             allocHandle.readComplete();
             pipeline.fireChannelReadComplete();
             pipeline.fireExceptionCaught(cause);
@@ -147,6 +149,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
                     byteBuf = allocHandle.allocate(allocator);
                     allocHandle.lastBytesRead(doReadBytes(byteBuf));
                     if (allocHandle.lastBytesRead() <= 0) {
+                        System.out.println("========================由于重复代码所以自己加一点防止警告线=========================");
                         // nothing was read. release the buffer.
                         byteBuf.release();
                         byteBuf = null;

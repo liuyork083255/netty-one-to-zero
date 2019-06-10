@@ -353,12 +353,31 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
         return this;
     }
 
+    /**
+     * 不管是新连接还是IO读取操作，都是需要经过这个方法，因为 msg 是 Object 类型，可以是 channel 表示新连接，也可以是 byteBuf，表示读数据
+     * 从这个方法就可以看出，如果是当前线程，那么就直接执行，不是当前线程就以提交任务的方式叫给指定的线程
+     *
+     *
+     */
     static void invokeChannelRead(final AbstractChannelHandlerContext next, Object msg) {
+        /**
+         * one-to-zero:
+         *  1 其实就是判断 msg 是不是 null
+         *  2 不为空则判断是不是 ReferenceCounted 类型
+         *  3 如果是，则添加一个可追踪的对象到这个 msg 上{@link io.netty.util.ReferenceCounted#touch()}，便于异常追踪，
+         *      其实就是一个 byteBuf 泄漏追踪机制吧？
+         */
         final Object m = next.pipeline.touch(ObjectUtil.checkNotNull(msg, "msg"), next);
+
         EventExecutor executor = next.executor();
         if (executor.inEventLoop()) {
             next.invokeChannelRead(m);
         } else {
+            /**
+             * one-to-zero:
+             *  如果不是当前线程，则以提交的方式这个任务
+             *
+             */
             executor.execute(new Runnable() {
                 @Override
                 public void run() {
@@ -371,6 +390,12 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     private void invokeChannelRead(Object msg) {
         if (invokeHandler()) {
             try {
+                /**
+                 * one-to-zero:
+                 *  1 如果是 新连接，则会进入 {@link io.netty.bootstrap.ServerBootstrap.ServerBootstrapAcceptor#channelRead(ChannelHandlerContext, Object)}
+                 */
+
+
                 ((ChannelInboundHandler) handler()).channelRead(this, msg);
             } catch (Throwable t) {
                 notifyHandlerException(t);
