@@ -394,6 +394,10 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
 
     /**
      * the {@link ChannelHandler} to use for serving the requests.
+     *
+     * one-to-zero:
+     *  这里是为 boss 的 pipeline 设置 handler，一般情况下 ServerBootStrap 启动很少添加 handler，都是添加的 childHandler
+     *
      */
     public B handler(ChannelHandler handler) {
         this.handler = ObjectUtil.checkNotNull(handler, "handler");

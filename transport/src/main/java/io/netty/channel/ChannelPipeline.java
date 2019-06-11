@@ -225,7 +225,8 @@ import java.util.NoSuchElementException;
  *  pipeline 是在抽象类中 {@link AbstractChannel} 被定义，
  *  并且 {@link io.netty.channel.socket.nio.NioServerSocketChannel} 和 {@link  io.netty.channel.socket.nio.NioSocketChannel} 都继承于 {@link AbstractChannel}
  *
- *
+ *  Note:
+ *      上面虽然说 入链 是一个，出链 是一个，但是真实测试下来，链就是一个，不管是 InBound 还是 OutBound 它们都会被放在 headHandler 和 tailHandler 中间被串起来
  *
  *
  *

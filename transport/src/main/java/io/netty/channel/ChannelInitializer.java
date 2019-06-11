@@ -49,6 +49,13 @@ import java.util.concurrent.ConcurrentHashMap;
  * Be aware that this class is marked as {@link Sharable} and so the implementation must be safe to be re-used.
  *
  * @param <C>   A sub-type of {@link Channel}
+ *
+ *
+ * one-to-zero:
+ *           ChannelInitializer 只暴露了一个抽象方法出去，就是 initChannel ，这个方法就是用户经常重写的添加自定义的各种 handler，
+ *           不管是 boss-channel 还是 worker-channel 的注册，初始化 pipeline 中的 handler 都是在注册完成之后被调用的，因为 initChannel 方法被回调是在 {@link DefaultChannelPipeline#pendingHandlerCallbackHead} 完成
+ *           具体流程可以参考 {@link ServerBootstrap#init(Channel)} 方法中的注释
+ *
  */
 @Sharable
 public abstract class ChannelInitializer<C extends Channel> extends ChannelInboundHandlerAdapter {

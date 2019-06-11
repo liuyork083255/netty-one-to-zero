@@ -93,6 +93,11 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
      * Create a new instance using the given {@link ServerSocketChannel}.
      */
     public NioServerSocketChannel(ServerSocketChannel channel) {
+        /**
+         * one-to-zero:
+         *  设置 boss 的 channel 的感兴趣事件，可以看到注册的是 ACCEPT 事件
+         *  这个类是被 channel factory 通过反射创建出来的
+         */
         super(null, channel, SelectionKey.OP_ACCEPT);
         config = new NioServerSocketChannelConfig(this, javaChannel().socket());
     }
@@ -154,7 +159,13 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
 
         try {
             if (ch != null) {
-                /* 其实就是将新连接的客户端封装成一个 NioSocketChannel 添加到 list 集合中 */
+                /**
+                 * one-to-zero:
+                 *  这里就是为新建的连接创建 channel
+                 *
+                 *  其实就是将新连接的客户端封装成一个 NioSocketChannel 添加到 list 集合中
+                 *
+                 */
                 buf.add(new NioSocketChannel(this, ch));
                 return 1;
             }

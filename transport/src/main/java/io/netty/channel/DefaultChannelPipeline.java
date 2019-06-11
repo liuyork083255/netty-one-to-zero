@@ -92,6 +92,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     /**
      * Set to {@code true} once the {@link AbstractChannel} is registered.Once set to {@code true} the value will never
      * change.
+     *
+     * one-to-zero:
+     *  用来标识这个 pipeline 对应的 channel 是否注册，一旦注册了，那么就设置为 true，并且以后都不能改变
      */
     private boolean registered;
 
@@ -613,6 +616,10 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
     private void callHandlerAdded0(final AbstractChannelHandlerContext ctx) {
         try {
+            /**
+             * one-to-zero:
+             *  真正回调 {@link ChannelHandler#handlerAdded(ChannelHandlerContext)}
+             */
             ctx.callHandlerAdded();
         } catch (Throwable t) {
             boolean removed = false;
@@ -654,6 +661,10 @@ public class DefaultChannelPipeline implements ChannelPipeline {
             firstRegistration = false;
             // We are now registered to the EventLoop. It's time to call the callbacks for the ChannelHandlers,
             // that were added before the registration was done.
+            /**
+             * one-to-zero:
+             *  调用 ChannelHandler 的时候了，这些 handler 是在注册完成之前被添加到 pipeline 中的
+             */
             callHandlerAddedForAllHandlers();
         }
     }

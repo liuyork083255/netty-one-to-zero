@@ -79,8 +79,20 @@ public abstract class AbstractNioChannel extends AbstractChannel {
     protected AbstractNioChannel(Channel parent, SelectableChannel ch, int readInterestOp) {
         super(parent);
         this.ch = ch;
+        /**
+         * one-to-zero:
+         *  设置当前 channel 感兴趣的事件
+         *  这个构造方法会被 boss 和 worker 实现类调用
+         *  分别是：
+         *  {@link AbstractNioByteChannel}
+         *  {@link AbstractNioMessageChannel}
+         */
         this.readInterestOp = readInterestOp;
         try {
+            /**
+             * one-to-zero:
+             *  设置非阻塞
+             */
             ch.configureBlocking(false);
         } catch (IOException e) {
             try {

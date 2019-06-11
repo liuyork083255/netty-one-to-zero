@@ -466,6 +466,10 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
             AbstractChannel.this.eventLoop = eventLoop;
 
+            /**
+             * one-to-zero:
+             *  boss 启动的时候，流出也会到这里，由于 boss 启动注册线程是 main 线程，所以分支会进入 else
+             */
             if (eventLoop.inEventLoop()) {
                 register0(promise);
             } else {
@@ -487,6 +491,11 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             }
         }
 
+        /**
+         * one-to-zero:
+         *  不管是 boss-channel 还是 worker-channel 的注册最终方法都是执行这个 register0
+         *
+         */
         private void register0(ChannelPromise promise) {
             try {
                 // check if the channel is still open as it could be closed in the mean time when the register
@@ -497,9 +506,9 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 boolean firstRegistration = neverRegistered;
                 /**
                  * one-to-zero:
-                 *  1 新连接接入 {@link AbstractNioChannel#doRegister()}
-                 *
-                 *
+                 *  不管是 boss-channel 还是 worker-channel 的注册，流程都会进入这个方法，下面的 doRegister() 方法又是一个抽象方法
+                 *  boss-channel 和 worker-channel 注册都会进入 {@link AbstractNioChannel#doRegister()}
+                 *  而 {@link AbstractNioChannel#doRegister()} 方法就是真正调用 java-nio 原生注册方法了
                  */
                 doRegister();
                 neverRegistered = false;
@@ -507,6 +516,12 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
                 // Ensure we call handlerAdded(...) before we actually notify the promise. This is needed as the
                 // user may already fire events through the pipeline in the ChannelFutureListener.
+                /**
+                 * one-to-zero:
+                 *  这个方法现在还没有完全搞懂 todo
+                 *  目前暂时理解作用是：
+                 *      在完成 channel 注册之后，回调 {@link ChannelHandler#handlerAdded(ChannelHandlerContext)} 方法
+                 */
                 pipeline.invokeHandlerAddedIfNeeded();
 
                 safeSetSuccess(promise);

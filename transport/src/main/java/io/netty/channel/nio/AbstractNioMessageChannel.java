@@ -75,6 +75,7 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
                         /**
                          * 这个方法是多态实现，
                          *  1 如果是新连接接入，则会执行 {@link io.netty.channel.socket.nio.NioServerSocketChannel#doReadMessages(List)}
+                         *      主要功能就是为新连接创建 channel ，然后放在 readBuf 中
                          *
                          *
                          *
