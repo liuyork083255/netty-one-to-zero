@@ -32,6 +32,10 @@ import java.util.WeakHashMap;
 final class ChannelHandlerMask {
 
     // Using to mask which methods must be called for a ChannelHandler.
+    /**
+     * one-to-zero:
+     *  定义所有的事件类型，采用这种方式好处通过位运算计算
+     */
     static final int MASK_EXCEPTION_CAUGHT = 1;
     static final int MASK_CHANNEL_REGISTERED = 1 << 1;
     static final int MASK_CHANNEL_UNREGISTERED = 1 << 2;
@@ -50,9 +54,18 @@ final class ChannelHandlerMask {
     static final int MASK_WRITE = 1 << 15;
     static final int MASK_FLUSH = 1 << 16;
 
+    /**
+     * one-to-zero:
+     *  定义所有的 inbound 事件类型，采用这种方式好处通过位运算计算
+     */
     private static final int MASK_ALL_INBOUND = MASK_EXCEPTION_CAUGHT | MASK_CHANNEL_REGISTERED |
             MASK_CHANNEL_UNREGISTERED | MASK_CHANNEL_ACTIVE | MASK_CHANNEL_INACTIVE | MASK_CHANNEL_READ |
             MASK_CHANNEL_READ_COMPLETE | MASK_USER_EVENT_TRIGGERED | MASK_CHANNEL_WRITABILITY_CHANGED;
+
+    /**
+     * one-to-zero:
+     *  定义所有的 outbound 事件类型，采用这种方式好处通过位运算计算
+     */
     private static final int MASK_ALL_OUTBOUND = MASK_EXCEPTION_CAUGHT | MASK_BIND | MASK_CONNECT | MASK_DISCONNECT |
             MASK_CLOSE | MASK_DEREGISTER | MASK_READ | MASK_WRITE | MASK_FLUSH;
 
@@ -70,6 +83,10 @@ final class ChannelHandlerMask {
     static int mask(Class<? extends ChannelHandler> clazz) {
         // Try to obtain the mask from the cache first. If this fails calculate it and put it in the cache for fast
         // lookup in the future.
+        /**
+         * one-to-zero:
+         *  通过当前线程作为 key，查找 map，如果不存在就缓存起来，
+         */
         Map<Class<? extends ChannelHandler>, Integer> cache = MASKS.get();
         Integer mask = cache.get(clazz);
         if (mask == null) {
@@ -85,6 +102,11 @@ final class ChannelHandlerMask {
     private static int mask0(Class<? extends ChannelHandler> handlerType) {
         int mask = MASK_EXCEPTION_CAUGHT;
         try {
+            /**
+             * one-to-zero:
+             *  判断是当前的 handler 是否是 ChannelInboundHandler 类型
+             *  如果 handlerType 的父类是 ChannelInboundHandler 类型，也是返回 true
+             */
             if (ChannelInboundHandler.class.isAssignableFrom(handlerType)) {
                 mask |= MASK_ALL_INBOUND;
 
@@ -114,6 +136,11 @@ final class ChannelHandlerMask {
                 }
             }
 
+            /**
+             * one-to-zero:
+             *  判断是当前的 handler 是否是 ChannelOutboundHandler 类型
+             *  如果 handlerType 的父类是 ChannelOutboundHandler 类型，也是返回 true
+             */
             if (ChannelOutboundHandler.class.isAssignableFrom(handlerType)) {
                 mask |= MASK_ALL_OUTBOUND;
 
@@ -146,6 +173,10 @@ final class ChannelHandlerMask {
                 }
             }
 
+            /**
+             * one-to-zero:
+             *  判断 handler 的 exceptionCaught 方法是否被 Skip.class 注解注释
+             */
             if (isSkippable(handlerType, "exceptionCaught", ChannelHandlerContext.class, Throwable.class)) {
                 mask &= ~MASK_EXCEPTION_CAUGHT;
             }
@@ -160,6 +191,11 @@ final class ChannelHandlerMask {
     @SuppressWarnings("rawtypes")
     private static boolean isSkippable(
             final Class<?> handlerType, final String methodName, final Class<?>... paramTypes) throws Exception {
+        /**
+         * one-to-zero:
+         *  测试下来发现，这种判断方式的注解必须是要有 @Retention(RetentionPolicy.RUNTIME) 标注，否则返回false
+         *  比如 Override SuppressWarnings 都是没有的，它们就会返回 false
+         */
         return AccessController.doPrivileged(new PrivilegedExceptionAction<Boolean>() {
             @Override
             public Boolean run() throws Exception {
@@ -180,6 +216,12 @@ final class ChannelHandlerMask {
      * {@link Skip} and simply pass the event through to the next handler, which reverses the behavior of the
      * supertype.
      * </p>
+     *
+     *
+     * one-to-zero:
+     *  这是一个内部注解，所以外面是无法使用的，该注解不会继承
+     *  含义就是，如果用户继承的类，然后重写了该方法，那么就必然会调用用户的方法，如果没有重写，那么就会被 skip 掉
+     *
      */
     @Target(ElementType.METHOD)
     @Retention(RetentionPolicy.RUNTIME)

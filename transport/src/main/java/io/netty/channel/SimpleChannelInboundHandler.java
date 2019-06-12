@@ -44,6 +44,14 @@ import io.netty.util.internal.TypeParameterMatcher;
  * Please keep in mind that {@link #channelRead0(ChannelHandlerContext, I)} will be renamed to
  * {@code messageReceived(ChannelHandlerContext, I)} in 5.0.
  * </p>
+ *
+ * one-to-zero：
+ *  该类的目的只有一个，那就是帮用户清空 msg instanceof ReferenceCounted 类型的消息。
+ *  需要注意：
+ *      如果清空的消息还要继续往下传递，那么应该调用 {@link ReferenceCountUtil#retain(Object)} 方法，否则下一个 handler 获取的消息可能已经被释放了
+ *
+ *
+ *
  */
 public abstract class SimpleChannelInboundHandler<I> extends ChannelInboundHandlerAdapter {
 

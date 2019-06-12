@@ -121,6 +121,11 @@ public class DefaultThreadFactory implements ThreadFactory {
     }
 
     protected Thread newThread(Runnable r, String name) {
+        /**
+         * one-to-zero:
+         *  这里创建的线程是经过优化的，其中一个点就是因为使用 {@link io.netty.util.concurrent.FastThreadLocal}
+         *  要使用这个优化点，就必须要让线程继承 FastThreadLocalThread
+         */
         return new FastThreadLocalThread(threadGroup, r, name);
     }
 }

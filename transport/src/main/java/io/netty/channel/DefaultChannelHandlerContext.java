@@ -17,6 +17,14 @@ package io.netty.channel;
 
 import io.netty.util.concurrent.EventExecutor;
 
+/**
+ * one-to-zero:
+ *  每一个 context 中都会有一个 handler 与之对应
+ *  context 其实是 handler 和 pipeline 通信的桥梁，handler 中调用 fileXxx 方法，其实是通过 context.fileXxx 方法来实现的
+ *  context.fileXxx 就会使用内部的 next 调用执行的 fileXxx 方法
+ *
+ *
+ */
 final class DefaultChannelHandlerContext extends AbstractChannelHandlerContext {
 
     private final ChannelHandler handler;
