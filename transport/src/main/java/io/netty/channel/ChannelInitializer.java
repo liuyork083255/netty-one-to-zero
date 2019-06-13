@@ -56,6 +56,10 @@ import java.util.concurrent.ConcurrentHashMap;
  *           不管是 boss-channel 还是 worker-channel 的注册，初始化 pipeline 中的 handler 都是在注册完成之后被调用的，因为 initChannel 方法被回调是在 {@link DefaultChannelPipeline#pendingHandlerCallbackHead} 完成
  *           具体流程可以参考 {@link ServerBootstrap#init(Channel)} 方法中的注释
  *
+ *           Note：
+ *              ChannelInitializer 是一个被 @Sharable 修饰的，所以它可以被添加到不同的 channel 中，只不过每次添加后并且完成初始化就会被移除
+ *
+ *
  */
 @Sharable
 public abstract class ChannelInitializer<C extends Channel> extends ChannelInboundHandlerAdapter {

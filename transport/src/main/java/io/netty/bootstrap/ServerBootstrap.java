@@ -132,6 +132,21 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
     /**
      * Set the {@link ChannelHandler} which is used to serve the request for the {@link Channel}'s.
+     *
+     * one-to-zero:
+     *  需要注意了，这里是给 worker 添加 handler，有两种添加方式
+     *  1 添加类型是继承 ChannelHandlerAdapter 的自定义类 e.g. MyHandler
+     *  2 添加的类型继承 ChannelHandlerAdapter 的 ChannelInitializer 类
+     *  这里区别很大：
+     *      serverBootstrap.childHandler(...)，添加方式是 new 也好，直接放入实例也好，netty 都会将至保存起来，
+     *      放在 {@link ServerBootstrap.ServerBootstrapAcceptor#childHandler} 中，每当有新连接接入，就会调用 child.pipeline().addLast(childHandler);
+     *      也就是说，这个 handler 的实例只有一个，而且必须是被 @Sharable 注释修饰，否则会抛出 ChannelPipelineException 异常，
+     *      因为每次 pipeline.addLast 添加 handler，都会校验这个 handler 是否可共享，且是否被添加过，详见 {@link DefaultChannelPipeline#checkMultiplicity(ChannelHandler)} 方法
+     *      所以：
+     *          如果 serverBootstrap.childHandler(...) 是一个非 ChannelInitializer 类，就必须实现 @Sharable 注解，
+     *          否则第一次 client 连接接入后，正常没问题，因为每一个 handler 有个 added 属性标识是否被加载过 正常，但是第二次 client 新连接立马就会抛出异常
+     *          而 ChannelInitializer 就没有关系，因为其实现了 @Sharable 注解
+     *
      */
     public ServerBootstrap childHandler(ChannelHandler childHandler) {
         this.childHandler = ObjectUtil.checkNotNull(childHandler, "childHandler");
@@ -300,9 +315,13 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
      */
     private static class ServerBootstrapAcceptor extends ChannelInboundHandlerAdapter {
 
+        /* worker 的 child group */
         private final EventLoopGroup childGroup;
+        /* worker 的 child handler */
         private final ChannelHandler childHandler;
+        /* worker 的 child option */
         private final Entry<ChannelOption<?>, Object>[] childOptions;
+        /* worker 的 child attr */
         private final Entry<AttributeKey<?>, Object>[] childAttrs;
         private final Runnable enableAutoReadTask;
 

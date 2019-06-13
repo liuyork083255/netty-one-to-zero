@@ -41,6 +41,13 @@ public abstract class ChannelHandlerAdapter implements ChannelHandler {
     /**
      * Return {@code true} if the implementation is {@link Sharable} and so can be added
      * to different {@link ChannelPipeline}s.
+     *
+     * one-to-zero:
+     *  判断当前的 handler 是否有 Sharable 注解，如果没有则将至添加到 thread local 中，默认是 {@link io.netty.util.concurrent.FastThreadLocal}，
+     *  因为创建的线程是 {@link io.netty.util.concurrent.FastThreadLocalThread} 类型
+     *  Note：
+     *      由于 key 是线程，所以每一个线程都会存储一份在本地中
+     *
      */
     public boolean isSharable() {
         /**
@@ -55,6 +62,7 @@ public abstract class ChannelHandlerAdapter implements ChannelHandler {
         Map<Class<?>, Boolean> cache = InternalThreadLocalMap.get().handlerSharableCache();
         Boolean sharable = cache.get(clazz);
         if (sharable == null) {
+            /* 估计是这一步骤比较耗时，所以做了线程本地存储 */
             sharable = clazz.isAnnotationPresent(Sharable.class);
             cache.put(clazz, sharable);
         }
