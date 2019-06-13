@@ -59,6 +59,14 @@ import java.util.concurrent.ConcurrentHashMap;
  *           Note：
  *              ChannelInitializer 是一个被 @Sharable 修饰的，所以它可以被添加到不同的 channel 中，只不过每次添加后并且完成初始化就会被移除
  *
+ *           ChannelInitializer 的作用是初始化 channel 对应的 pipeline 的 !!!
+ *           ChannelInitializer 在 boss-pipeline 中作用：
+ *              由于 boss-channel 只有一个，所以 ChannelInitializer 只需要初始化一次就好了，后续不要了，因为不会再创建 boss-channel 了
+ *           ChannelInitializer 在 worker-pipeline 中作用：
+ *              由于 worker-channel 不止一个，每次 client 接入，都会创建新的 channel，所以每次需要 ChannelInitializer 来初始化 channel 对应的 pipeline
+ *              所以这个 ChannelInitializer 需要一直被保存起来，放在 {@link ServerBootstrap.ServerBootstrapAcceptor#childHandler} 中，
+ *              worker-channel 初始化后，就会和 boss-channel 一样删除这个 ChannelInitializer，因为后续不需要了
+ *
  *
  */
 @Sharable

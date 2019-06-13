@@ -208,6 +208,10 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     public final ChannelPipeline addLast(EventExecutorGroup group, String name, ChannelHandler handler) {
         final AbstractChannelHandlerContext newCtx;
         synchronized (this) {
+            /**
+             * one-to-zero:
+             *  校验这个 handler 是否可以被添加到 pipeline 中
+             */
             checkMultiplicity(handler);
 
             newCtx = newContext(group, filterName(name, handler), handler);
@@ -602,6 +606,13 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         oldCtx.next = newCtx;
     }
 
+    /**
+     * one-to-zero:
+     *   1 校验新增到 pipeline 中的 handler 是否是 ChannelHandlerAdapter 类型
+     *   2 校验这个 handler 是否是被 @Sharable 注解修饰
+     *   3 校验这个 handler 是否曾经被添加过
+     *   4 设置这个 handler 添加状态 added 为 true
+     */
     private static void checkMultiplicity(ChannelHandler handler) {
         if (handler instanceof ChannelHandlerAdapter) {
             ChannelHandlerAdapter h = (ChannelHandlerAdapter) handler;
