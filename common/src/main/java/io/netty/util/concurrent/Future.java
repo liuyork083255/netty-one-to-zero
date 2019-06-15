@@ -51,6 +51,9 @@ public interface Future<V> extends java.util.concurrent.Future<V> {
      * specified listener is notified when this future is
      * {@linkplain #isDone() done}.  If this future is already
      * completed, the specified listener is notified immediately.
+     *
+     * one-to-zero;
+     *  添加listener, 任务完成后执行listener，如果任务已经完成，则添加时立刻执行
      */
     Future<V> addListener(GenericFutureListener<? extends Future<? super V>> listener);
 
@@ -59,6 +62,9 @@ public interface Future<V> extends java.util.concurrent.Future<V> {
      * specified listeners are notified when this future is
      * {@linkplain #isDone() done}.  If this future is already
      * completed, the specified listeners are notified immediately.
+     *
+     * one-to-zero;
+     *  添加多个 listener, 任务完成后执行listener，如果任务已经完成，则添加时立刻执行
      */
     Future<V> addListeners(GenericFutureListener<? extends Future<? super V>>... listeners);
 
@@ -83,12 +89,18 @@ public interface Future<V> extends java.util.concurrent.Future<V> {
     /**
      * Waits for this future until it is done, and rethrows the cause of the failure if this future
      * failed.
+     *
+     * one-to-zero:
+     *  等待任务结束，如果任务产生异常或被中断则抛出异常，否则返回Future自身
      */
     Future<V> sync() throws InterruptedException;
 
     /**
      * Waits for this future until it is done, and rethrows the cause of the failure if this future
      * failed.
+     *
+     * one-to-zero;
+     *  等待这个未来，直到它完成为止，如果这个未来失败，则重新抛出失败的原因。
      */
     Future<V> syncUninterruptibly();
 
@@ -97,6 +109,9 @@ public interface Future<V> extends java.util.concurrent.Future<V> {
      *
      * @throws InterruptedException
      *         if the current thread was interrupted
+     *
+     * one-to-zero;
+     *  等待任务结束，如果任务被中断则抛出中断异常，与sync不同的是只抛出中断异常，不抛出任务产生的异常
      */
     Future<V> await() throws InterruptedException;
 

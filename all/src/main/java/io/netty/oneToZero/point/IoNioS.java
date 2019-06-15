@@ -32,7 +32,8 @@ package io.netty.oneToZero.point;
  *  对比 IO 和 NIO
  *  1 两者都会有阻塞，就是在数据到来之时，但是数据到了之后，IO模型连同读取数据到达且被复制到应用进程的缓冲区时才返回，在此期间一直是阻塞等待的
  *  2 复用selector可以让多个channel注册，所以理论上一个线程就可以完成所有操作，而IO没有selector概念，一个等待就是一个线程，所以会说多少个链接就要多少个线程
- *
+ *      因为在 BIO 中，一个 channel 就要对应一个 线程，这个线程只要调用 read 方法，就会阻塞，
+ *      但是在 NIO 中，有了 selector 对象，那么多个 channel 就可以被注册到一个 selector 上，并且负责这个 selector 的监听一个线程就可以完成
  *
  */
 public class IoNioS {

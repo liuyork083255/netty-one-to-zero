@@ -30,20 +30,76 @@ import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import static io.netty.util.internal.ObjectUtil.checkNotNull;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
+/**
+ * one-to-zero:
+ *  DefaultPromise 的设计比较有特点，利用一个 result 属性表示了所有的状态，详见{@link this#result}
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ */
 public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(DefaultPromise.class);
     private static final InternalLogger rejectedExecutionLogger =
             InternalLoggerFactory.getInstance(DefaultPromise.class.getName() + ".rejectedExecution");
     private static final int MAX_LISTENER_STACK_DEPTH = Math.min(8,
             SystemPropertyUtil.getInt("io.netty.defaultPromise.maxListenerStackDepth", 8));
+
+    /**
+     * one-to-zero:
+     *  对当前类的成员变量 result 进行原子操作
+     *  由于 IO 线程和用户线程可能同时操作 Promise，所以需要加锁
+     */
     @SuppressWarnings("rawtypes")
     private static final AtomicReferenceFieldUpdater<DefaultPromise, Object> RESULT_UPDATER =
             AtomicReferenceFieldUpdater.newUpdater(DefaultPromise.class, Object.class, "result");
+
+    /**
+     * one-to-zero；
+     * 默认的成功对象标识
+     */
     private static final Object SUCCESS = new Object();
+
+    /**
+     * one-to-zero；
+     * 默认的非取消对象标识
+     */
     private static final Object UNCANCELLABLE = new Object();
 
+    /**
+     * one-to-zero:
+     *  这个结果就是记录当前 Future 的结果
+     *  这个变量的修改完成依赖辅助类 RESULT_UPDATER 完成
+     *
+     *  null	                    任务还未开始执行（初始值），此时任务可以被取消
+     *  UNCANCELLABLE	            任务不可取消
+     *  CANCELLATION_CAUSE_HOLDER	任务取消
+     *  CauseHolder	                执行完成，产生的异常
+     *  SUCCESS	                   执行成功，且结果为 null
+     *  其他	                       执行成功，且结果为 result
+     *
+     *
+     *
+     *
+     *
+     */
     private volatile Object result;
+
+    /**
+     * one-to-zero:
+     *  默认情况下，这个执行器就是 IO 线程，因为默认创建的 Promise 就是用的 IO 线程
+     *  可以参考 AbstractChannelHandlerContext#writeFlush(msg) 方法，里面调用 newPromise
+     *  当然，用户可以自己主动创建一个 Promise，并且提供一个 Executor
+     */
     private final EventExecutor executor;
+
     /**
      * One or more listeners. Can be a {@link GenericFutureListener} or a {@link DefaultFutureListeners}.
      * If {@code null}, it means either 1) no listeners were added yet or 2) all listeners were notified.
@@ -142,10 +198,17 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
     public Promise<V> addListener(GenericFutureListener<? extends Future<? super V>> listener) {
         checkNotNull(listener, "listener");
 
+        /**
+         * one-to-zero：
+         *  由于 IO 线程和用户线程可能同时操作 Promise，所以需要加锁
+         */
         synchronized (this) {
             addListener0(listener);
         }
 
+        /*
+         * 在添加监听器后，判断一下 Future 是否完成，如果已经完成，则立马执行监听器
+         */
         if (isDone()) {
             notifyListeners();
         }
@@ -202,20 +265,44 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
 
     @Override
     public Promise<V> await() throws InterruptedException {
+        /*
+         * 如果这个 Future 已经是完成状态，那么立即返回
+         */
         if (isDone()) {
             return this;
         }
 
+        /*
+         * 仅仅是设置当前线程的中断信号为 true，那么下次这个线程进入 wait sleep 等方法就会立马抛出异常
+         */
         if (Thread.interrupted()) {
             throw new InterruptedException(toString());
         }
 
+        /**
+         * 这个检测，如果调用在 channel-handler 中调用下面代码：
+         *      ChannelFuture future = ctx.write("hello");
+         *      future.await()
+         * 必然会抛出异常
+         * 原因：
+         *      1 默认的 Promise 是用的IO线程
+         *      2 future.await() 就是方法，必然会执行下面的代码
+         *  但是如果调用：
+         *      ChannelFuture future = ctx.writeAndFlush("hello");
+         *      future.await()
+         *  测试下来一直没有发生，不发生异常很好理解，因为数据发送出去了，并且进入这个方法的时候会判断 isDone，直接返回
+         *  但是不理解的是：writeAndFlush 貌似也是异步操作，如果来不及发送，isDone 状态也是 false 才对呀？？？
+         *  看来需要对
+         *      AbstractChannelHandlerContext#write(Object msg, boolean flush, ChannelPromise promise) 好好研究了!!!
+         */
         checkDeadLock();
 
         synchronized (this) {
+            /* 未完成则一直循环 */
             while (!isDone()) {
                 incWaiters();
                 try {
+                    /* 等待被唤醒 */
                     wait();
                 } finally {
                     decWaiters();
@@ -380,6 +467,12 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
     }
 
     protected void checkDeadLock() {
+        /*
+         * one-to-zero:
+         *  1 判断有没有设置线程池，我们知道，netty 提供了让 handler 执行的线程池，就是防止业务时间过长影响了 IO 线程
+         *  2 判断当前线程和 executor 执行的线程是否是同一个，如果是则任务发生了可能死锁
+         *      这里用的是"可能"，因为一个线程是线性执行，如果前面的代码还没有执行完成，就依赖后面的任务，则在一个线程内，肯定是不能被唤醒的
+         */
         EventExecutor e = executor();
         if (e != null && e.inEventLoop()) {
             throw new BlockingOperationException(toString());
@@ -506,6 +599,13 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
         }
     }
 
+    /**
+     * one-to-zero:
+     *  这个方法是安全的，因为调用这个方法被 synchronize 修饰
+     *  如果监听器 {@link this#listeners} 还没有设置，则直接指定 {@link this#listeners} 等于 这个监听器
+     *  如果监听器 {@link this#listeners} 被设置了，说明这是添加了至少 2 个监听器
+     *
+     */
     private void addListener0(GenericFutureListener<? extends Future<? super V>> listener) {
         if (listeners == null) {
             listeners = listener;
@@ -525,6 +625,9 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
     }
 
     private boolean setSuccess0(V result) {
+        /**
+         * 设置成功对象标识，如果是 null，则采用默认的 {@link SUCCESS} 成功对象
+         */
         return setValue0(result == null ? SUCCESS : result);
     }
 
@@ -533,8 +636,16 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
     }
 
     private boolean setValue0(Object objResult) {
-        if (RESULT_UPDATER.compareAndSet(this, null, objResult) ||
-            RESULT_UPDATER.compareAndSet(this, UNCANCELLABLE, objResult)) {
+        /**
+         * one-to-zero:
+         *  1 CAS 期望将 {@link result} 从 null 设置为 objResult
+         *  2 CAS 期望将 {@link result} 从 UNCANCELLABLE 设置为 objResult
+         */
+        if (RESULT_UPDATER.compareAndSet(this, null, objResult) || RESULT_UPDATER.compareAndSet(this, UNCANCELLABLE, objResult)) {
+            /**
+             * 设置好 {@link result} 状态之后，说明当前的就会检查有没有监听器在等待
+             * 检查是否有等待者，如果有则直接唤醒，并且判断是否有监听者，有就返回 true
+             */
             if (checkNotifyWaiters()) {
                 notifyListeners();
             }
@@ -546,6 +657,11 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
     /**
      * Check if there are any waiters and if so notify these.
      * @return {@code true} if there are any listeners attached to the promise, {@code false} otherwise.
+     *
+     * one-to-zero：
+     *  检查是否有等待这个 promise 的线程，如果有则唤醒它们
+     *  并且判断是否
+     *
      */
     private synchronized boolean checkNotifyWaiters() {
         if (waiters > 0) {

@@ -19,8 +19,15 @@ import java.util.Arrays;
 
 final class DefaultFutureListeners {
 
+    /**
+     * one-to-zero:
+     *  netty 默认监听器存储器，数据格式 数组
+     *  初始大小在构造方法内部，默认 2，过多则扩容，Arrays.copyOf
+     */
     private GenericFutureListener<? extends Future<?>>[] listeners;
     private int size;
+
+    /** 记录监听器的个数 */
     private int progressiveSize; // the number of progressive listeners
 
     @SuppressWarnings("unchecked")
@@ -42,6 +49,9 @@ final class DefaultFutureListeners {
         GenericFutureListener<? extends Future<?>>[] listeners = this.listeners;
         final int size = this.size;
         if (size == listeners.length) {
+            /**
+             * 监听器数组保存两个，但是如果监听器过多，则默认扩容两倍，采用数据 copy 方式
+             */
             this.listeners = listeners = Arrays.copyOf(listeners, size << 1);
         }
         listeners[size] = l;
