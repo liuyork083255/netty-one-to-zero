@@ -46,7 +46,8 @@ import io.netty.util.internal.TypeParameterMatcher;
  * </p>
  *
  * one-to-zero：
- *  该类的目的只有一个，那就是帮用户清空 msg instanceof ReferenceCounted 类型的消息。
+ *  该类的目的有两个，一个就是帮用户清空 msg instanceof ReferenceCounted 类型的消息。
+ *  第二个就是只对类型感兴趣的 msg 进行拦截，通过 {@link this#acceptInboundMessage} 方法进行判断
  *  需要注意：
  *      如果清空的消息还要继续往下传递，那么应该调用 {@link ReferenceCountUtil#retain(Object)} 方法，否则下一个 handler 获取的消息可能已经被释放了
  *
@@ -112,6 +113,7 @@ public abstract class SimpleChannelInboundHandler<I> extends ChannelInboundHandl
                 I imsg = (I) msg;
                 channelRead0(ctx, imsg);
             } else {
+                /* 如果 msg 不是感兴趣的 I 类型，那么直接传递给下一个 handler */
                 release = false;
                 ctx.fireChannelRead(msg);
             }

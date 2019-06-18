@@ -48,6 +48,25 @@ import static java.lang.Math.min;
  * <li>{@link #getUserDefinedWritability(int)} and {@link #setUserDefinedWritability(int, boolean)}</li>
  * </ul>
  * </p>
+ *
+ * one-to-zero:
+ *  这个类是用于存储 out-bound 发送的数据，目前暂时理解成 write 数据的缓冲区吧
+ *  netty 为了提高吞吐量，在业务层和 socket 之间又加了一个 ChannelOutboundBuffer，在我们调用channel.write的时候，
+ *  所有写出的数据其实并没有写到socket，而是先写到ChannelOutboundBuffer。当调用channel.flush的时候才真正的向socket写出。
+ *  Note：
+ *      这个 ChannelOutboundBuffer 是没有边界的，扩容代码 {@link this#expandNioBufferArray(ByteBuffer[], int, int)}，
+ *      这也就意味着：如果没有控制channel.write的速度，会有大量的数据在这个buffer里堆积，而且如果碰到socket又『写不出』数据的时候，很有可能的结果就是资源耗尽。
+ *      并且ChannelOutboundBuffer 里面的 buffer 都是 DirectByteBuffer，是 GC Heap 之外的，仅仅是监控GC的话还监控不出来这个隐患。
+ *
+ *  为了解决这个问题：netty 提供了 isWritable ，参考：https://www.cnblogs.com/rainy-shurun/p/5213086.html
+ *  因为内核中有 读缓冲区，当然也有写缓冲区，所有的 socket 发送数据都是先写入这个缓冲区中，而 netty 提供的 {@link Channel#isWritable()} 方法就是判断是否已满
+ *  如果满了我们就不应该继续写，否则会导致堆外内存堆积耗尽资源。
+ *  需要注意：
+ *      发送的数据是等到接收方 ACK 确认后才会删除的，因为防止丢失；如果对方 TCP 接收的滑动窗口非常少-慢，那么放松方 TCP 缓冲区就会堆积，从而达到降低速率效果
+ *
+ *
+ *
+ *
  */
 public final class ChannelOutboundBuffer {
     // Assuming a 64-bit JVM:

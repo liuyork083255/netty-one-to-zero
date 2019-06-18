@@ -48,6 +48,11 @@ import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
  *  pipeline 是在抽象类中 {@link AbstractChannel} 定义
  *  并且 {@link io.netty.channel.socket.nio.NioServerSocketChannel} 和 {@link  io.netty.channel.socket.nio.NioSocketChannel} 都继承于 {@link AbstractChannel}
  *
+ *
+ *  event 事件在 pipeline 中传递，是会经过每一个 handler 的，如果我们继承的 handler 没有执行，那么肯定也是进入了父类然后被判断不符合类型跳过
+ *  比如 StringDecoder 的父类 MessageToMessageDecoder ，在 channelRead 就会判断 acceptInboundMessage(msg)
+ *  同样在 {@link SimpleChannelInboundHandler#channelRead(ChannelHandlerContext, Object)} 方法中也会调用 acceptInboundMessage(msg) 进行判断
+ *
  */
 public class DefaultChannelPipeline implements ChannelPipeline {
 
@@ -95,6 +100,21 @@ public class DefaultChannelPipeline implements ChannelPipeline {
      *
      * one-to-zero:
      *  用来标识这个 pipeline 对应的 channel 是否注册，一旦注册了，那么就设置为 true，并且以后都不能改变
+     *
+     *  被修改的机制是 channel 完成注册
+     *  具体流程是创建 NioServerSocketChannel 或者 NioSocketChannel 的时候会创建 pipeline 对象，
+     *  而这个时候 pipeline 的 {@link this#registered} 状态肯定是默认值 false。
+     *  在为 pipeline 添加 handler 的时候，调用 addXxx 方法，不管是哪个方法，里面都会判断 registered 状态，
+     *  如果是为注册，那么就会添加一个异步任务 {@link this#pendingHandlerCallbackHead}。
+     *  我们都知道，所有的 handler 添加默认都是用 {@link ChannelInitializer#removeState(ChannelHandlerContext)} 方式添加的，
+     *  所以不管是 boss 还是 worker ，第一次都是添加的 ChannelInitializer 这个 handler，然后 registered == false，所以添加任务
+     *  这个任务就是在 channel 完成注册之后会被调用，修改 registered 状态
+     *  可以参考：
+     *      通过{@link AbstractChannel.AbstractUnsafe#register0(ChannelPromise)} 完成注册之后
+     *      就会在这个方法里面调用 pipeline.invokeHandlerAddedIfNeeded();
+     *      这个方法就会调用 pipeline 里面的所有 handler 的 handlerAdded 方法，
+     *      而 {@link ChannelInitializer#handlerAdded(ChannelHandlerContext)} 就实现了这个方法
+     *
      */
     private boolean registered;
 
@@ -1383,16 +1403,51 @@ public class DefaultChannelPipeline implements ChannelPipeline {
             unsafe.deregister(promise);
         }
 
+        /**
+         * one-to-zero:
+         *  这个方法是对外发送数据时被调用，这个发送数据可以理解成 建立连接通知客户端，或者是 write msg
+         *  这个方法理解起来目前还是有点困惑：
+         *      参考：https://blog.csdn.net/zengqiang1/article/details/76066873
+         *  现在发现两处会调用这个方法 {@link this#channelActive(ChannelHandlerContext)} {@link this#channelReadComplete(ChannelHandlerContext)}
+         *  也就是在建立连接之后 和 读操作 完成之后，netty 会自动在这两个方法里面调用 {@link this#readIfIsAutoRead} 方法
+         *  这个方法就会判断 {@link ChannelConfig#isAutoRead()} 当前读操作是否是自动读，如果是则调用 channel.read()
+         *  跟着 channel.read() 点击进入发现，进入 pipeline.read() -> tail.read()，最后逻辑发现从 TailContext 开始，往 out-bound 路线查找 READ 感兴趣的 handler
+         *  最后进入到 {@link this#read(ChannelHandlerContext)} 方法
+         *  unsafe.beginRead() 方法其实就是在当前的 channel 的读事件重新注册到 selectorKey 上面
+         *  那疑问就来了，所有的 worker-channel 不是一开始建立就注册了 READ 事件吗？？？
+         *      原因是在于 worker-channel 每次在读取完成之后会把这个读事件取消掉？？？
+         *
+         * 说了这么多都还没有说 auto-read 作用，它是可以控制当前 netty 是否还从 channel 内核中的缓冲区读取数据，测试下来，如果在 channelRead 方法中读取了数据，
+         * 然后调用 ctx.channel().config().setAutoRead(false);  那么 netty 就不会对当前的 channel-READ 事件感兴趣，所以就不会读取内核数据，
+         * 这样可以减缓发送方发送数据的 频率 ，具体还是参考 上面的链接
+         *
+         */
         @Override
         public void read(ChannelHandlerContext ctx) {
             unsafe.beginRead();
         }
 
+        /**
+         * 这个方法则是真正将数据写入 缓冲区 的方法，这个方法被调用，是不会发送数据，必须要再次调用 flush 方法
+         *
+         * write 方法实际上并没有将消息写出去, 而是将消息 msg 和此次操作的 promise 放入到当前连接的输出缓冲区 OutboundBuffer 中了
+         *
+         * 测试下来问题：
+         *  如果调用这个方法，写入的数据是 String 类型，那么写入无效，客户端无法接收；
+         *  如果在 pipeline 加上 StringDecoder StringEncoder 则进入这个方法是一个 byteBuf 类型，客户端是可以接收数据的
+         *  原因是 HeadHandler 写入是数据只能是两个类型: ByteBuf 和 FileRegion 类型，
+         *  详见 {@link io.netty.channel.nio.AbstractNioByteChannel#filterOutboundMessage(Object)}
+         *
+         */
         @Override
         public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) {
             unsafe.write(msg, promise);
         }
 
+        /**
+         * 这个方法则是真正将数据从缓冲区刷新到网络管道
+         * 并且将缓冲区的 promise 设置 completed 状态
+         */
         @Override
         public void flush(ChannelHandlerContext ctx) {
             unsafe.flush();

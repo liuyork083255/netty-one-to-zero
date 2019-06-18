@@ -85,10 +85,6 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
      *  SUCCESS	                   执行成功，且结果为 null
      *  其他	                       执行成功，且结果为 result
      *
-     *
-     *
-     *
-     *
      */
     private volatile Object result;
 
@@ -109,6 +105,8 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
     private Object listeners;
     /**
      * Threading - synchronized(this). We are required to hold the monitor to use Java's underlying wait()/notifyAll().
+     * one-to-zero:
+     *  主要是记录当前有多少个线程添加监听器，并且调用了 wait 相关的等待方法
      */
     private short waiters;
 
@@ -625,7 +623,7 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
     }
 
     private boolean setSuccess0(V result) {
-        /**
+        /*
          * 设置成功对象标识，如果是 null，则采用默认的 {@link SUCCESS} 成功对象
          */
         return setValue0(result == null ? SUCCESS : result);
@@ -866,6 +864,11 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
     }
 
     private static boolean isDone0(Object result) {
+        /**
+         * 可以看到，只要 {@link this#result} 不等于 null 并且 不等于 UNCANCELLABLE 就算是完成
+         * 因为被设置了值
+         * 至于 UNCANCELLABLE 状态是一个不可取消的状态，现在还没有时间去弄懂
+         */
         return result != null && result != UNCANCELLABLE;
     }
 

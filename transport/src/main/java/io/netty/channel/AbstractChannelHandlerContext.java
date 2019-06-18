@@ -99,6 +99,11 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     // There is no need to make this volatile as at worse it will just create a few more instances then needed.
     private Tasks invokeTasks;
 
+    /**
+     * one-to-zero;
+     *  这个字段是用来标记当前 context 对应的 handler 状态，因为 handler 是可以被动态移除和新增的，所以在每次回调 handler
+     *  方法的时候，需要判断一下，与 context 绑定的 handler 是否被添加到了 pipeline 中，否则就不调用
+     */
     private volatile int handlerState = INIT;
 
     AbstractChannelHandlerContext(DefaultChannelPipeline pipeline, EventExecutor executor,
@@ -399,8 +404,6 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
                  * one-to-zero:
                  *  1 如果是 新连接，则会进入 {@link io.netty.bootstrap.ServerBootstrap.ServerBootstrapAcceptor#channelRead(ChannelHandlerContext, Object)}
                  */
-
-
                 ((ChannelInboundHandler) handler()).channelRead(this, msg);
             } catch (Throwable t) {
                 notifyHandlerException(t);
@@ -788,11 +791,23 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
         return promise;
     }
 
+    /**
+     * one-to-zero;
+     *  可以发现，write-flush 操作其实就是先后调用 invokeWrite0 和 invokeFlush0 方法
+     */
     private void invokeWriteAndFlush(Object msg, ChannelPromise promise) {
+        /*
+         * 判断当前 handler 状态是否是 ADD_COMPLETE
+         */
         if (invokeHandler()) {
             invokeWrite0(msg, promise);
             invokeFlush0();
         } else {
+            /*
+             * 如果当前 handler 状态不是 ADD_COMPLETE，说明可能被移除，那么这个 handler 就不应该执行
+             * 而是传递给下一个 handler，这里的方式比较巧妙，直接调用 writeAndFlush(msg, promise)，
+             * 因为在这个方法里面会以当前的 context 对应的 handler 为起点，往前找对 write-flush 感兴趣的 handler
+             */
             writeAndFlush(msg, promise);
         }
     }
@@ -800,6 +815,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     private void write(Object msg, boolean flush, ChannelPromise promise) {
         ObjectUtil.checkNotNull(msg, "msg");
         try {
+            /* 校验 promise 是否合法 */
             if (isNotValidPromise(promise, true)) {
                 ReferenceCountUtil.release(msg);
                 // cancelled
@@ -810,10 +826,22 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
             throw e;
         }
 
-        final AbstractChannelHandlerContext next = findContextOutbound(flush ?
-                (MASK_WRITE | MASK_FLUSH) : MASK_WRITE);
+        /**
+         * one-to-zero:
+         * 根据感兴趣事件查找 out-bound 链中的 handler
+         * 开始查找是以当前的节点为起点！！！
+         *
+         *  如果 刷新：感兴趣的事件则是 写 和 刷新
+         *  如果 不刷新：不感兴趣则是 只有写
+         */
+        final AbstractChannelHandlerContext next = findContextOutbound(flush ? (MASK_WRITE | MASK_FLUSH) : MASK_WRITE);
+
+        /*
+         * 如果 msg 是 ReferenceCounted 子类，则为其附属一个对象 next，主要是用于调试，防止内存泄漏
+         */
         final Object m = pipeline.touch(msg, next);
         EventExecutor executor = next.executor();
+        /* 如果当前线程就是 IO 线程，则直接运行 */
         if (executor.inEventLoop()) {
             if (flush) {
                 next.invokeWriteAndFlush(m, promise);
@@ -821,6 +849,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
                 next.invokeWrite(m, promise);
             }
         } else {
+            /* 如果当前线程不是 IO 线程，那么将这个写任务封装成一个 task，然后交给 IO 线程运行 */
             final AbstractWriteTask task;
             if (flush) {
                 task = WriteAndFlushTask.newInstance(next, m, promise);
@@ -839,6 +868,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 
     @Override
     public ChannelFuture writeAndFlush(Object msg) {
+        /* 创建默认的 promise */
         return writeAndFlush(msg, newPromise());
     }
 
@@ -950,6 +980,12 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
         return ctx;
     }
 
+    /**
+     * one-to-zero:
+     *  根据感兴趣的事件向 head 方向遍历 handler，然后返回
+     *  如果一个都没有，那么就会找到 head-handler
+     *  开始查找是以当前的节点为起点！！！
+     */
     private AbstractChannelHandlerContext findContextOutbound(int mask) {
         AbstractChannelHandlerContext ctx = this;
         do {
@@ -990,7 +1026,15 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     final void callHandlerAdded() throws Exception {
         // We must call setAddComplete before calling handlerAdded. Otherwise if the handlerAdded method generates
         // any pipeline events ctx.handler() will miss them because the state will not allow it.
+        /**
+         * one-to-zero;
+         *  setAddComplete() 方法则是设置 {@link this#handlerState} 状态为 ADD_COMPLETE
+         *  之所以这里调用 handlerAdded 之前，需要提前设置 状态，那是因为 handlerAdded 方法是用户自定义的，
+         *  用户根本就不知道要改变什么状态，所有 netty 自己设置
+         *
+         */
         if (setAddComplete()) {
+            /* handlerAdded 方法默认什么都不做 */
             handler().handlerAdded(this);
         }
     }
@@ -1014,6 +1058,10 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
      * If this method returns {@code false} we will not invoke the {@link ChannelHandler} but just forward the event.
      * This is needed as {@link DefaultChannelPipeline} may already put the {@link ChannelHandler} in the linked-list
      * but not called {@link ChannelHandler#handlerAdded(ChannelHandlerContext)}.
+     *
+     * one-to-zero：
+     *  判断当前这个 context 对应的 handler 是否被添加到 pipeline 中，如果是则可以调用，否则将这个事件传递给下一个 handler
+     *
      */
     private boolean invokeHandler() {
         // Store in local variable to reduce volatile reads.

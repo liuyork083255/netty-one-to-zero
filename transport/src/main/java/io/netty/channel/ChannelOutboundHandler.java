@@ -73,6 +73,8 @@ public interface ChannelOutboundHandler extends ChannelHandler {
 
     /**
      * Intercepts {@link ChannelHandlerContext#read()}.
+     * one-to-zero:
+     *  参考 {@link io.netty.channel.DefaultChannelPipeline.HeadContext#read(ChannelHandlerContext)} 中的注释
      */
     void read(ChannelHandlerContext ctx) throws Exception;
 
@@ -85,6 +87,13 @@ public interface ChannelOutboundHandler extends ChannelHandler {
      * @param msg               the message to write
      * @param promise           the {@link ChannelPromise} to notify once the operation completes
      * @throws Exception        thrown if an error occurs
+     *
+     * one-to-zero:
+     *  这个方法仅仅是将数据写入缓冲区中，数据是不会发送出去的
+     *  经过测试，不管写入多少数据，数据都不会发送出去
+     *
+     *  并且这个 promise 返回的状态是为完成的，只有 flush 之后，promise 才会标记为完成
+     *
      */
     void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception;
 
@@ -94,6 +103,12 @@ public interface ChannelOutboundHandler extends ChannelHandler {
      *
      * @param ctx               the {@link ChannelHandlerContext} for which the flush operation is made
      * @throws Exception        thrown if an error occurs
+     *
+     * one-to-zero:
+     *  调用此方法，会将所有 write 消息全部发送到网络中
+     *  并且会将所有 write 中的 promise 全部设置为 completed 状态
+     *  目前还不知道怎么做到的？？？
+     *
      */
     void flush(ChannelHandlerContext ctx) throws Exception;
 }

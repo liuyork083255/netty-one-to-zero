@@ -222,9 +222,9 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
          * Note：
          *  这里需要注意：这里连续为 boss 的 pipeline 添加了两个 handler
          *  一个是 ChannelInitializer：
-         *      它继承 ChannelInboundHandlerAdapter，这个handler里面就会添加到 pipeline 中
+         *      它继承 ChannelInboundHandlerAdapter，这个handler立马就会添加到 pipeline 中
          *  一个是 ServerBootstrapAcceptor：
-         *      这个是真正处理客户端新连接的 handler，但是这个添加不会里面执行，而是被回调，就是机制是
+         *      这个是真正处理客户端新连接的 handler，但是这个添加不会立马执行，而是被回调，回调机制是
          *      p.addLast 方法添加 handler 后，会判断当前 pipeline 是否被注册到 channel，如果没有就添加一个任务 {@link DefaultChannelPipeline#pendingHandlerCallbackHead}持有
          *      这个回调会在 channel 注册之后被触发，因为 {@link AbstractChannel.AbstractUnsafe#register0(ChannelPromise)} 完成注册之后都会方法里面调用 pipeline.invokeHandlerAddedIfNeeded();
          *      这个方法就是会调用 pipeline 里面的所有 handler 的 handlerAdded 方法，而 {@link ChannelInitializer#handlerAdded(ChannelHandlerContext)} 就实现了这个方法，

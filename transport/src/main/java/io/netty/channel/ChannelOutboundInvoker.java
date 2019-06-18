@@ -204,6 +204,12 @@ public interface ChannelOutboundInvoker {
      * Request to write a message via this {@link ChannelHandlerContext} through the {@link ChannelPipeline}.
      * This method will not request to actual flush, so be sure to call {@link #flush()}
      * once you want to request to flush all pending data to the actual transport.
+     *
+     * one-to-zero:
+     *  这个方法仅仅是将数据写入缓冲区中，数据是不会发送出去的
+     *  经过测试，不管写入多少数据，数据都不会发送出去
+     *
+     *
      */
     ChannelFuture write(Object msg);
 
@@ -211,11 +217,24 @@ public interface ChannelOutboundInvoker {
      * Request to write a message via this {@link ChannelHandlerContext} through the {@link ChannelPipeline}.
      * This method will not request to actual flush, so be sure to call {@link #flush()}
      * once you want to request to flush all pending data to the actual transport.
+     *
+     * one-to-zero:
+     *  这个方法仅仅是将数据写入缓冲区中，数据是不会发送出去的
+     *  经过测试，不管写入多少数据，数据都不会发送出去
+     *
+     *  并且这个 promise 返回的状态是为完成的，只有 flush 之后，promise 才会标记为完成
+     *
      */
     ChannelFuture write(Object msg, ChannelPromise promise);
 
     /**
      * Request to flush all pending messages via this ChannelOutboundInvoker.
+     *
+     * one-to-zero:
+     *  调用此方法，会将所有 write 消息全部发送到网络中
+     *  并且会将所有 write 中的 promise 全部设置为 completed 状态
+     *  目前还不知道怎么做到的？？？
+     *
      */
     ChannelOutboundInvoker flush();
 

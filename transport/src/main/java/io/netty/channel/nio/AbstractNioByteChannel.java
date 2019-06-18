@@ -271,6 +271,13 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
         incompleteWrite(writeSpinCount < 0);
     }
 
+    /**
+     * 1 判断 msg 类型是否为 ByteBuf
+     * 2 如果是 ByteBuf 类型
+     *      如果是堆 buf 则转为 直接内存，如果已经是直接内存 buf，则直接返回
+     * 3 如果是文件类型 FileRegion 则直接返回
+     * 4 如果既不是 ByteBuf 和 FileRegion 类型，那么则会直接抛出异常
+     */
     @Override
     protected final Object filterOutboundMessage(Object msg) {
         if (msg instanceof ByteBuf) {

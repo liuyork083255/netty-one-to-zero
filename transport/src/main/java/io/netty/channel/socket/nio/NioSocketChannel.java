@@ -384,6 +384,11 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
     protected void doWrite(ChannelOutboundBuffer in) throws Exception {
         SocketChannel ch = javaChannel();
         int writeSpinCount = config().getWriteSpinCount();
+
+        /**
+         * one-to-zero:
+         *  这里使用 do-while ，主要是判断数据是否全部发送成功
+         */
         do {
             if (in.isEmpty()) {
                 // All written so clear OP_WRITE
@@ -425,6 +430,14 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
                     // to check if the total size of all the buffers is non-zero.
                     // We limit the max amount to int above so cast is safe
                     long attemptedBytes = in.nioBufferSize();
+                    /**
+                     * one-to-zero:
+                     *  这里就是真正发送数据的方法，调用的是 {@link sun.nio.ch.SocketChannelImpl#write(ByteBuffer[], int, int)} 方法
+                     *  这个方法是未开源的，没有源码
+                     *
+                     *  这里的 ch 是一个 SocketChannel 类型，SocketChannelImpl 是其实现类
+                     *
+                     */
                     final long localWrittenBytes = ch.write(nioBuffers, 0, nioBufferCnt);
                     if (localWrittenBytes <= 0) {
                         incompleteWrite(true);

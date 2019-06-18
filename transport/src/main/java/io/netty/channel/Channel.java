@@ -164,6 +164,10 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
      * requested write operation immediately.  Any write requests made when
      * this method returns {@code false} are queued until the I/O thread is
      * ready to process the queued write requests.
+     *
+     * one-to-zero:
+     *  详见 {@link ChannelOutboundBuffer} 的注释
+     *
      */
     boolean isWritable();
 

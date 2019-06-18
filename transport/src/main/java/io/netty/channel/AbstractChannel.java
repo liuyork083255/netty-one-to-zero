@@ -876,7 +876,16 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
         public final void write(Object msg, ChannelPromise promise) {
             assertEventLoop();
 
+            /*
+             * one-to-zero:
+             *  获取当前这个 channel 对应的输出缓冲区
+             */
             ChannelOutboundBuffer outboundBuffer = this.outboundBuffer;
+            /*
+             * one-to-zero:
+             *  如果 outboundBuffer 为 null， 说明这个 channel 已经被关闭
+             *  那么就需要设置 promise ，并且释放 msg
+             */
             if (outboundBuffer == null) {
                 // If the outboundBuffer is null we know the channel was closed and so
                 // need to fail the future right away. If it is not null the handling of the rest
@@ -890,17 +899,33 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
             int size;
             try {
+                /**
+                 * one-to-zero:
+                 *  调用 write 方法写入数据，进入 {@link io.netty.channel.nio.AbstractNioByteChannel#filterOutboundMessage(Object)}
+                 *  msg 只能是 ByteBuf 或者 FileRegion 类型
+                 */
                 msg = filterOutboundMessage(msg);
                 size = pipeline.estimatorHandle().size(msg);
                 if (size < 0) {
                     size = 0;
                 }
             } catch (Throwable t) {
+                /*
+                 * one-to-zero;
+                 *  filterOutboundMessage 方法是可能抛出异常的，比如 write 的数据 String 类型，没有一个编码器，则会抛出异常
+                 *  设置 promise 状态为失败
+                 */
                 safeSetFailure(promise, t);
+                /* 当然，抛出异常是别的原因，如果是 msg 是 byteBuf 类型，需要释放计数器 */
                 ReferenceCountUtil.release(msg);
                 return;
             }
-
+            /*
+             * one-to-zero:
+             *  write 方法其实就是把写入的数据 msg 和 promise 放在缓冲对象 outboundBuffer 中，
+             *  msg 和promise 在 outboundBuffer 中的存在形式是一个自定义的结构体 Entry。
+             *  也就是说调用 write 方法实际上并不是真的将消息写出去, 而是将消息和此次操作的 promise 放入到了一个队列中
+             */
             outboundBuffer.addMessage(msg, size, promise);
         }
 
@@ -947,6 +972,10 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             }
 
             try {
+                /**
+                 * 真正写出数据的方法
+                 * 实现类为 {@link io.netty.channel.socket.nio.NioSocketChannel#doWrite(ChannelOutboundBuffer)}
+                 */
                 doWrite(outboundBuffer);
             } catch (Throwable t) {
                 if (t instanceof IOException && config().isAutoClose()) {
