@@ -364,6 +364,19 @@ public abstract class AbstractNioChannel extends AbstractChannel {
             // Flush immediately only when there's no pending flush.
             // If there's a pending flush operation, event loop will call forceFlush() later,
             // and thus there's no need to call it now.
+            /**
+             * one-to-zero:
+             *  判断当前 channel 是否注册了 write 事件，如果注册了，说明本次可以不用调用 flush 方法，因为 event-loop 下一次
+             *  仍然可以选择出 写事件
+             *  加入这个机制主要目的是：当前有可能写 socket 的缓冲区到达了水位线，也就是快满了
+             *  所以缓冲一下写入的速度
+             *
+             *  Note：
+             *      NIO 的写事件大部分时候是不需要注册的，只有当 TCP 缓冲区达到水位线了，不能写入了，才需要注册写事件。
+             *      当缓冲区有空间了，NIO 就会触发写事件。
+             *
+             *
+             */
             if (!isFlushPending()) {
                 super.flush0();
             }

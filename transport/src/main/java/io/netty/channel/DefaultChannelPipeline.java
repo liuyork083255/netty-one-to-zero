@@ -1433,7 +1433,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         /**
          * 这个方法则是真正将数据写入 缓冲区 的方法，这个方法被调用，是不会发送数据，必须要再次调用 flush 方法
          *
-         * write 方法实际上并没有将消息写出去, 而是将消息 msg 和此次操作的 promise 放入到当前连接的输出缓冲区 OutboundBuffer 中了
+         * write 方法实际上并没有将消息写出去, 而是将消息 msg 和此次操作的 promise 放入到当前连接的输出缓冲区 {@link ChannelOutboundBuffer} 中了
          *
          * 测试下来问题：
          *  如果调用这个方法，写入的数据是 String 类型，那么写入无效，客户端无法接收；

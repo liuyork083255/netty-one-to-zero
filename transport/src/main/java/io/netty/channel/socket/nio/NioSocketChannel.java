@@ -27,6 +27,8 @@ import io.netty.channel.EventLoop;
 import io.netty.channel.FileRegion;
 import io.netty.channel.RecvByteBufAllocator;
 import io.netty.channel.nio.AbstractNioByteChannel;
+import io.netty.channel.nio.AbstractNioChannel;
+import io.netty.channel.nio.NioEventLoop;
 import io.netty.channel.socket.DefaultSocketChannelConfig;
 import io.netty.channel.socket.ServerSocketChannel;
 import io.netty.channel.socket.SocketChannelConfig;
@@ -383,23 +385,31 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
     @Override
     protected void doWrite(ChannelOutboundBuffer in) throws Exception {
         SocketChannel ch = javaChannel();
+        /**
+         *  获取自旋的次数，默认16
+         *  也就是说每次进入这个方法，最多会往 socket 中写 16 次，
+         *  如果 16 次还没有写完 ChannelOutboundBuffer 中的数据，那么就会在 selector 上注册一个 WRITE 事件，详见 {@link AbstractNioByteChannel#incompleteWrite(boolean)}
+         *  可以通过 config().setWriteSpinCount() 设置本次写的次数
+         */
         int writeSpinCount = config().getWriteSpinCount();
 
-        /**
-         * one-to-zero:
-         *  这里使用 do-while ，主要是判断数据是否全部发送成功
-         */
         do {
             if (in.isEmpty()) {
                 // All written so clear OP_WRITE
+                /* 如果数据写完了，或者根本就是空的，那么取消掉注册的 WRITE 事件 */
                 clearOpWrite();
                 // Directly return here so incompleteWrite(...) is not called.
                 return;
             }
 
             // Ensure the pending writes are made of ByteBufs only.
+            // 获取设置的每个 ByteBuf 的最大字节数，这个数字来自操作系统的 so_sndbuf 定义
             int maxBytesPerGatheringWrite = ((NioSocketChannelConfig) config).getMaxBytesPerGatheringWrite();
+
+            // 调用 ChannelOutboundBuffer 的 nioBuffers 方法获取 ByteBuffer 数组，从flushedEntry开始，循环获取，测试发现，如果写入只有一个msg，该数组长度还是 1024
             ByteBuffer[] nioBuffers = in.nioBuffers(1024, maxBytesPerGatheringWrite);
+
+            // 这个是实际的调用 write 写入 msg 的个数，但是测试下来，如果一次性调用 write 超过 1024 次，这个值最大还是 1024
             int nioBufferCnt = in.nioBufferCount();
 
             // Always us nioBuffers() to workaround data-corruption.
@@ -417,6 +427,7 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
                     int attemptedBytes = buffer.remaining();
                     final int localWrittenBytes = ch.write(buffer);
                     if (localWrittenBytes <= 0) {
+                        /* 写入的字节个数如果 <= 0，说明写入失败，很有可能是因为写入缓冲区达到了水位线 */
                         incompleteWrite(true);
                         return;
                     }
@@ -439,20 +450,32 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
                      *
                      */
                     final long localWrittenBytes = ch.write(nioBuffers, 0, nioBufferCnt);
+
+                    /**
+                     * 写入的字节个数如果 <= 0，说明写入失败，很有可能是因为写入缓冲区达到了水位线
+                     * 所以需要注册一个写事件，不在继续写了，让 TCP 发送缓冲一下，下一个 event-loop 循环的时候会 选择出 WRITE 事件，
+                     * 而且是强制写入
+                     * 详见 {@link NioEventLoop#processSelectedKey(SelectionKey, AbstractNioChannel)} 中的 WRITE 事件处理逻辑，是调用 forceFlush 方法
+                     */
                     if (localWrittenBytes <= 0) {
                         incompleteWrite(true);
                         return;
                     }
                     // Casting to int is safe because we limit the total amount of data in the nioBuffers to int above.
-                    adjustMaxBytesPerGatheringWrite((int) attemptedBytes, (int) localWrittenBytes,
-                            maxBytesPerGatheringWrite);
+                    adjustMaxBytesPerGatheringWrite((int) attemptedBytes, (int) localWrittenBytes, maxBytesPerGatheringWrite);
+
+                    // 删除 ChannelOutboundBuffer 中的 Entry
                     in.removeBytes(localWrittenBytes);
+
                     --writeSpinCount;
                     break;
                 }
             }
         } while (writeSpinCount > 0);
 
+        /*
+         * 流程到这里来基本就是数据还没有写完，writeSpinCount < 0 为 false，因为 writeSpinCount = 0;
+         */
         incompleteWrite(writeSpinCount < 0);
     }
 

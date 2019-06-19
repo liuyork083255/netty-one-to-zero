@@ -300,6 +300,21 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
                 "unsupported message type: " + StringUtil.simpleClassName(msg) + EXPECTED_TYPES);
     }
 
+    /**
+     * one-to-zero:
+     * 参数
+     *  true：
+     *      表示需要注册一个 WRITE 事件在 selector 上，NIO 的写事件大部分时候是不需要注册的，如果注册了，说明情况特殊，需要特殊处理
+     *      netty 在 select 出的事件类型是 WRITE 的时候，那么会任务这个写操作很特殊，紧急，
+     *      所以会强行把数据写入 socket，详见 {@link NioEventLoop#processSelectedKey(SelectionKey, AbstractNioChannel)} 中的 WRITE 事件处理逻辑，是调用 forceFlush 方法
+     *
+     *  false:
+     *      取消 WRITE 事件
+     *      并且添加一个任务 flush 数据到 socket 中，
+     *      比如：16 次循环还没有把数据写出去，netty 任务这个方法的数据很大，但是又为了不影响其他任务（例如心跳检测任务），
+     *      所以 netty 不会继续写，而是将写的任务封装成一个 task，然后添加到 queue 中，保证 netty 可以执行别的任务，并且也不会丢失当前写的任务。
+     *
+     */
     protected final void incompleteWrite(boolean setOpWrite) {
         // Did not write completely.
         if (setOpWrite) {

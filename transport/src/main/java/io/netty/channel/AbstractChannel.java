@@ -937,8 +937,13 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             if (outboundBuffer == null) {
                 return;
             }
-
+            /* 设置刷新开始的节点位置，并且标记发送的节点不可删除 即标记 promise 为 uncancel 状态 */
             outboundBuffer.addFlush();
+            /**
+             * 标记完成后立马将数据真正写入 socket 中
+             * 这个方法实际是先会进入 {@link AbstractNioChannel.AbstractNioUnsafe#flush0()} 方法中
+             *
+             */
             flush0();
         }
 

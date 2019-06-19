@@ -866,6 +866,9 @@ public final class NioEventLoop extends SingleThreadEventLoop {
 
             /**
              *  如果是写操作，则说明有半包消息尚未发送完成，需要继续使用flush方法进行发送
+             *  Note：
+             *      NIO 的写事件大部分时候是不需要注册的
+             *      但是如果主动注册了 写事件，那么肯定必然出现了特殊情况，比如半包写事件，后续数据必须强制写入
              */
             // Process OP_WRITE first as we may be able to write some queued buffers and so free memory.
             if ((readyOps & SelectionKey.OP_WRITE) != 0) {

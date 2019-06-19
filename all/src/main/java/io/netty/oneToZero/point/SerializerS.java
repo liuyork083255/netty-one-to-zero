@@ -9,8 +9,8 @@ package io.netty.oneToZero.point;
  *  而序列化的时候是先将对象序列化成ByteArrayOutputStream再copy到ByteBuf。
  *  而使用ByteBufInputStream和ByteBufOutputStream就不再有这样的内存拷贝了，大大节约了内存开销。
  *
- * 2 socket.write和socket.read都需要一个direct byte buffer(即使你传入的是一个heap byte buffer，
- *  socket内部也会将内容copy到direct byte buffer)。如果我们直接使用ByteBufInputStream和ByteBufOutputStream封装的direct byte buffer再加上Netty 4的内存池，
+ * 2 socket.write和socket.read都需要一个direct byte buffer(即使你传入的是一个heap byte buffer，socket内部也会将内容copy到direct byte buffer)。
+ *  如果我们直接使用ByteBufInputStream和ByteBufOutputStream封装的direct byte buffer再加上Netty 4的内存池，
  *  那么内存将更有效的使用。
  *  这里提一个问题：为什么socket.read和socket.write都需要direct byte buffer呢？heap byte buffer不行？
  *      参考链接：https://www.zhihu.com/question/57374068

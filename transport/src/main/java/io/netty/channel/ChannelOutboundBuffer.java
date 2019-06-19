@@ -50,7 +50,7 @@ import static java.lang.Math.min;
  * </p>
  *
  * one-to-zero:
- *  这个类是用于存储 out-bound 发送的数据，目前暂时理解成 write 数据的缓冲区吧
+ *  这个类是用于存储 out-bound 发送的数据，每一个 channel 对应一个 out-bound buffer
  *  netty 为了提高吞吐量，在业务层和 socket 之间又加了一个 ChannelOutboundBuffer，在我们调用channel.write的时候，
  *  所有写出的数据其实并没有写到socket，而是先写到ChannelOutboundBuffer。当调用channel.flush的时候才真正的向socket写出。
  *  Note：
@@ -93,8 +93,18 @@ public final class ChannelOutboundBuffer {
         }
     };
 
+    /**
+     * one-to-zero:
+     *  与之绑定的 channel
+     *  在初始化 channel 的时候会创建这个类
+     *  {@link AbstractChannel.AbstractUnsafe#outboundBuffer}
+     *  可以发现，ChannelOutboundBuffer 实际是于 channel 中的 unsafe 绑定在一起的
+     */
     private final Channel channel;
 
+    /**
+     * entry 结构图操作节点的说明可以参考 /doc/ChannelOoutboundBuffer-Entry结构图.png
+     */
     // Entry(flushedEntry) --> ... Entry(unflushedEntry) --> ... Entry(tailEntry)
     //
     // The Entry that is the first in the linked-list structure that was flushed
@@ -132,6 +142,17 @@ public final class ChannelOutboundBuffer {
     /**
      * Add given message to this {@link ChannelOutboundBuffer}. The given {@link ChannelPromise} will be notified once
      * the message was written.
+     *
+     * one-to-zero:
+     *  添加一个 msg 到 ChannelOutboundBuffer 中，一旦这个消息被写入，那么 ChannelPromise 将会被通知
+     *
+     * 步骤：
+     *  1、创建一个 新的Entry。
+     *  2、判断 tailEntry 是否为 null，如果为 null 说明链表为空。则把 flushedEntry 置为null。
+     *  3、如果 tailEntry 不为空，则把新添加的 Entry 添加到  tailEntry 后面 。
+     *  4、 将新添加的 Entry 设置为 链表的 tailEntry。
+     *  5、如果 unflushedEntry 为null，说明没有未被刷新的元素。新添加的Entry 肯定是未被刷新的，则把当前 Entry 设置为 unflushedEntry 。
+     *  6、统计未被刷新的元素的总大小。
      */
     public void addMessage(Object msg, int size, ChannelPromise promise) {
         Entry entry = Entry.newInstance(msg, size, total(msg), promise);
@@ -154,6 +175,22 @@ public final class ChannelOutboundBuffer {
     /**
      * Add a flush to this {@link ChannelOutboundBuffer}. This means all previous added messages are marked as flushed
      * and so you will be able to handle them.
+     *
+     * one-to-zero：
+     *  当 addMessage 成功添加进 ChannelOutboundBuffer 后，就需要 flush 刷新到 Socket 中去。
+     *  但是这个方法并不是做刷新到 Socket 的操作。而是将 unflushedEntry 的引用转移到 flushedEntry 引用中，表示即将刷新这个 flushedEntry
+     *  这么做的原因是：
+     *      因为 Netty 提供了 promise，这个对象可以做取消操作，例如，不发送这个 ByteBuf 了，所以，在 write 之后，flush 之前需要告诉 promise 不能做取消操作了。
+     *
+     * 步骤：
+     *  1、通过 unflushedEntry 获取未被刷新元素 entry。
+     *  2、如果 entry 为null 说明没有待刷新的元素，不执行任何操作
+     *  3、如果 entry 不为 null，说明有需要被刷新的元素
+     *  4、如果 flushedEntry == null 说明当前没有正在刷新的任务，则把 entry 设置为 flushedEntry 刷新的起点。
+     *  5、循环设置 entry， 设置这些 entry 状态设置为非取消状态，如果设置失败，则把这些entry 节点取消并使 totalPendingSize 减去这个节点的字节大小。
+     *
+     * 在调用完 outboundBuffer.addFlush() 方法后，Channel 会调用 flush0 方法做真正的刷新。代码参见 AbstractUnsafe.flush() 方法。
+     *
      */
     public void addFlush() {
         // There is no need to process all entries if there was already a flush before and no new messages
@@ -337,6 +374,12 @@ public final class ChannelOutboundBuffer {
         return true;
     }
 
+    /**
+     * one-to-zero:
+     *  1 如果 flushed ==0 说明，链表中所有 flush 的数据都已经发送到 Socket 中。
+     *  2 如果此时 e == tailEntry 说明链表为空，则把 tailEntry 和 unflushedEntry 都置为空。
+     *  3 把 flushedEntry 置为下一个节点（flushedEntry 此时是头结点）。
+     */
     private void removeEntry(Entry e) {
         if (-- flushed == 0) {
             // processed everything
@@ -821,7 +864,15 @@ public final class ChannelOutboundBuffer {
         boolean processMessage(Object msg) throws Exception;
     }
 
+    /**
+     * one-to-zero:
+     *  由于 Entry 使用比较频繁，会频繁的创建和销毁，这里使用了 Entry 的对象池，创建的时候从缓存中获取，销毁时回收。
+     */
     static final class Entry {
+        /**
+         * one-to-zero:
+         *  Recycler 是一个基于线程本身存储的轻量级对象栈，数据结构是 栈
+         */
         private static final Recycler<Entry> RECYCLER = new Recycler<Entry>() {
             @Override
             protected Entry newObject(Handle<Entry> handle) {
