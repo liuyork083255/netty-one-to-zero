@@ -64,7 +64,12 @@ import static java.lang.Math.min;
  *  需要注意：
  *      发送的数据是等到接收方 ACK 确认后才会删除的，因为防止丢失；如果对方 TCP 接收的滑动窗口非常少-慢，那么放松方 TCP 缓冲区就会堆积，从而达到降低速率效果
  *
- *
+ *  ChannelOutboundBuffer 虽然无界，但是可以给它配置一个高水位线和低水位线，
+ *  当 buffer 的大小超过高水位线的时候对应 channel 的 isWritable 就会变成 false，当 buffer 的大小低于低水位线的时候，isWritable 就会变成 true。
+ *  高水位线和低水位线是字节数，默认高水位是64K，低水位是32K，我们可以根据我们的应用需要支持多少连接数和系统资源进行合理规划。
+ *  可以通过修改
+ *      .option(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, 64 * 1024)
+ *      .option(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, 32 * 1024) 配置高低水位线
  *
  *
  */

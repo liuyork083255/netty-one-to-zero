@@ -17,14 +17,7 @@ package io.netty.channel.nio;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelConfig;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelMetadata;
-import io.netty.channel.ChannelOutboundBuffer;
-import io.netty.channel.ChannelPipeline;
-import io.netty.channel.FileRegion;
-import io.netty.channel.RecvByteBufAllocator;
+import io.netty.channel.*;
 import io.netty.channel.internal.ChannelUtils;
 import io.netty.channel.socket.ChannelInputShutdownEvent;
 import io.netty.channel.socket.ChannelInputShutdownReadComplete;
@@ -186,6 +179,16 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
                 // * The user called Channel.read() or ChannelHandlerContext.read() in channelReadComplete(...) method
                 //
                 // See https://github.com/netty/netty/issues/2254
+                /**
+                 * one-to-zero:
+                 *  worker 读操作完成后，都会进入这个 finally 代码块
+                 *  1 如果用户在 channelRead 方法中读取消息后，设置了 auto-read = false，
+                 *      那么不会调用 {@link io.netty.channel.DefaultChannelPipeline.HeadContext#read(ChannelHandlerContext)}
+                 *      但是会调用下面的 removeReadOp 方法，也就是取消读事件
+                 *  2 如果用户在 channelRead 方法中读取消息后，没有修改 auto-read 默认值，
+                 *      那么会调用 {@link io.netty.channel.DefaultChannelPipeline.HeadContext#read(ChannelHandlerContext)}，设置注册读事件
+                 *      但是不会调用下面的 removeReadOp 方法
+                 */
                 if (!readPending && !config.isAutoRead()) {
                     removeReadOp();
                 }

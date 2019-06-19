@@ -1415,11 +1415,14 @@ public class DefaultChannelPipeline implements ChannelPipeline {
          *  最后进入到 {@link this#read(ChannelHandlerContext)} 方法
          *  unsafe.beginRead() 方法其实就是在当前的 channel 的读事件重新注册到 selectorKey 上面
          *  那疑问就来了，所有的 worker-channel 不是一开始建立就注册了 READ 事件吗？？？
-         *      原因是在于 worker-channel 每次在读取完成之后会把这个读事件取消掉？？？
+         *      原因是在于 worker-channel 每次在读取完成之后会把这个读事件取消掉
+         *      删除位置 {@link io.netty.channel.nio.AbstractNioByteChannel.NioByteUnsafe#read()} finally 代码块
          *
          * 说了这么多都还没有说 auto-read 作用，它是可以控制当前 netty 是否还从 channel 内核中的缓冲区读取数据，测试下来，如果在 channelRead 方法中读取了数据，
          * 然后调用 ctx.channel().config().setAutoRead(false);  那么 netty 就不会对当前的 channel-READ 事件感兴趣，所以就不会读取内核数据，
          * 这样可以减缓发送方发送数据的 频率 ，具体还是参考 上面的链接
+         *
+         * 如果设置 auto-read 为 false，则下面这个方法不会被调用
          *
          */
         @Override
