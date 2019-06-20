@@ -29,6 +29,17 @@ import static io.netty.util.internal.ObjectUtil.checkPositiveOrZero;
  * dropped down below the {@linkplain #low low water mark},
  * {@link Channel#isWritable()} will start to return
  * {@code true} again.
+ *
+ * one-to-zero:
+ *  标记写入缓冲区的状态  用于设置写缓冲区的低水印和高水印。
+ *  千万注意：
+ *      这个缓冲区大小不是 TCP 层的缓冲区，而是指 {@link ChannelOutboundBuffer} 这无边界的缓冲区大小，因为不对其加以控制，其会无线增涨，导致 OOM
+ *
+ *  如果写入缓冲区中排队的字节数超过了高水位，Channel.isWritable()将开始返回false。
+ *  如果写入缓冲区中排队的字节数超过了高水位，然后又下降到低水位以下，Channel.isWritable()将再次返回true。
+ *
+ *  缓冲区的大小可以通过 option 设置
+ *
  */
 public final class WriteBufferWaterMark {
 

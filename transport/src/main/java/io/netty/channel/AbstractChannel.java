@@ -905,6 +905,11 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                  *  msg 只能是 ByteBuf 或者 FileRegion 类型
                  */
                 msg = filterOutboundMessage(msg);
+                /**
+                 * one-to-zero:
+                 *  进入 {@link DefaultMessageSizeEstimator#size} 方法
+                 *  这个方法计算消息的大小，返回的是字节数大小  e.g.  写入 “hello”  返回字节数 5
+                 */
                 size = pipeline.estimatorHandle().size(msg);
                 if (size < 0) {
                     size = 0;

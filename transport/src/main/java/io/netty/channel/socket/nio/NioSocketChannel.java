@@ -382,6 +382,10 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
         }
     }
 
+    /**
+     * 将 ChannelOutboundBuffer 中的数据写到TCP发送缓冲区，如果 ChannelOutboundBuffer 被全部 flush 完，则取消 OP_WRITE；
+     * 相反，如果没有 flush 完，而发送缓冲区满，则注册 OP_WRITE；
+     */
     @Override
     protected void doWrite(ChannelOutboundBuffer in) throws Exception {
         SocketChannel ch = javaChannel();
@@ -423,11 +427,12 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
                     // Only one ByteBuf so use non-gathering write
                     // Zero length buffers are not added to nioBuffers by ChannelOutboundBuffer, so there is no need
                     // to check if the total size of all the buffers is non-zero.
+                    /* 如果只有一个ByteBuffer，则不需要使用 nio 的 gathering write。 */
                     ByteBuffer buffer = nioBuffers[0];
                     int attemptedBytes = buffer.remaining();
                     final int localWrittenBytes = ch.write(buffer);
                     if (localWrittenBytes <= 0) {
-                        /* 写入的字节个数如果 <= 0，说明写入失败，很有可能是因为写入缓冲区达到了水位线 */
+                        /* 写入的字节个数如果 <= 0，说明写入失败，很有可能是因为写入 TCP 缓冲区已满 */
                         incompleteWrite(true);
                         return;
                     }
@@ -452,7 +457,7 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
                     final long localWrittenBytes = ch.write(nioBuffers, 0, nioBufferCnt);
 
                     /**
-                     * 写入的字节个数如果 <= 0，说明写入失败，很有可能是因为写入缓冲区达到了水位线
+                     * 写入的字节个数如果 <= 0，说明写入失败，很有可能是因为 TCP 缓冲区已满
                      * 所以需要注册一个写事件，不在继续写了，让 TCP 发送缓冲一下，下一个 event-loop 循环的时候会 选择出 WRITE 事件，
                      * 而且是强制写入
                      * 详见 {@link NioEventLoop#processSelectedKey(SelectionKey, AbstractNioChannel)} 中的 WRITE 事件处理逻辑，是调用 forceFlush 方法
@@ -464,7 +469,11 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
                     // Casting to int is safe because we limit the total amount of data in the nioBuffers to int above.
                     adjustMaxBytesPerGatheringWrite((int) attemptedBytes, (int) localWrittenBytes, maxBytesPerGatheringWrite);
 
-                    // 删除 ChannelOutboundBuffer 中的 Entry
+                    /**
+                     * one-to-zero:
+                     *  删除 ChannelOutboundBuffer 中的 Entry
+                     *  同时删除 {@link ChannelOutboundBuffer#totalPendingSize}
+                     */
                     in.removeBytes(localWrittenBytes);
 
                     --writeSpinCount;

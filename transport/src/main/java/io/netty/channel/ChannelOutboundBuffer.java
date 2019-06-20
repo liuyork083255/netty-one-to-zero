@@ -65,11 +65,15 @@ import static java.lang.Math.min;
  *      发送的数据是等到接收方 ACK 确认后才会删除的，因为防止丢失；如果对方 TCP 接收的滑动窗口非常少-慢，那么放松方 TCP 缓冲区就会堆积，从而达到降低速率效果
  *
  *  ChannelOutboundBuffer 虽然无界，但是可以给它配置一个高水位线和低水位线，
+ *  也就是每次写入和删除的时候，都判断一下 ChannelOutboundBuffer 容量和水位线比较，如果大于水位线或者小于水位线则调用
+ *  pipeline 中的 fireChannelWritabilityChanged 和 fireChannelWritabilityChanged 方法
+ *
  *  当 buffer 的大小超过高水位线的时候对应 channel 的 isWritable 就会变成 false，当 buffer 的大小低于低水位线的时候，isWritable 就会变成 true。
  *  高水位线和低水位线是字节数，默认高水位是64K，低水位是32K，我们可以根据我们的应用需要支持多少连接数和系统资源进行合理规划。
  *  可以通过修改
  *      .option(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, 64 * 1024)
  *      .option(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, 32 * 1024) 配置高低水位线
+ *  默认大小在 {@link WriteBufferWaterMark} 中设置的
  *
  *
  */
@@ -116,7 +120,17 @@ public final class ChannelOutboundBuffer {
     // The number of flushed entries that are not written yet
     private int flushed;
 
+    /**
+     * ChannelOutboundBuffer 中被刷新的 entry 个数，也可以理解为 调用 write 的次数
+     * 这个值会在 {@link #nioBuffers(int, long)} 方法中被设置
+     */
     private int nioBufferCount;
+
+    /**
+     * ChannelOutBoundBuffer 中被刷新内容的总字节数，这个字节数是真正写入的字节数，比如写入 "hello" 则字节数为 5
+     * 并没有加上 {@link #CHANNEL_OUTBOUND_BUFFER_ENTRY_OVERHEAD} 长度
+     * 这个值会在 {@link #nioBuffers(int, long)} 方法中被设置
+     */
     private long nioBufferSize;
 
     private boolean inFail;
@@ -124,6 +138,17 @@ public final class ChannelOutboundBuffer {
     private static final AtomicLongFieldUpdater<ChannelOutboundBuffer> TOTAL_PENDING_SIZE_UPDATER =
             AtomicLongFieldUpdater.newUpdater(ChannelOutboundBuffer.class, "totalPendingSize");
 
+    /**
+     * one-to-zero:
+     *  记录调用 write 之后，还没有 flush 出去的字节数
+     *  但是这个值是大于真实的值
+     *  原因：
+     *      write 一个 "hello" 字符串，那么字节数为 5，但是每一个 Entry 计算都会将大小加上 {@link #CHANNEL_OUTBOUND_BUFFER_ENTRY_OVERHEAD}，默认96，
+     *      所以这个时候字节数为 96 + 5 ，代码在 {@link ChannelOutboundBuffer.Entry#newInstance}（现在还不清楚为什么会这么做？？？）
+     *
+     *  当调用 flush 后，数据写入到 socket 中，则该值初始为 0
+     *
+     */
     @SuppressWarnings("UnusedDeclaration")
     private volatile long totalPendingSize;
 
@@ -147,11 +172,11 @@ public final class ChannelOutboundBuffer {
      *  添加一个 msg 到 ChannelOutboundBuffer 中，一旦这个消息被写入，那么 ChannelPromise 将会被通知
      *
      * 步骤：
-     *  1、创建一个 新的Entry。
+     *  1、创建一个 新的 Entry。
      *  2、判断 tailEntry 是否为 null，如果为 null 说明链表为空。则把 flushedEntry 置为null。
      *  3、如果 tailEntry 不为空，则把新添加的 Entry 添加到  tailEntry 后面 。
      *  4、 将新添加的 Entry 设置为 链表的 tailEntry。
-     *  5、如果 unflushedEntry 为null，说明没有未被刷新的元素。新添加的Entry 肯定是未被刷新的，则把当前 Entry 设置为 unflushedEntry 。
+     *  5、如果 unflushedEntry 为 null，说明没有未被刷新的元素。新添加的Entry 肯定是未被刷新的，则把当前 Entry 设置为 unflushedEntry 。
      *  6、统计未被刷新的元素的总大小。
      */
     public void addMessage(Object msg, int size, ChannelPromise promise) {
@@ -184,7 +209,7 @@ public final class ChannelOutboundBuffer {
      *
      * 步骤：
      *  1、通过 unflushedEntry 获取未被刷新元素 entry。
-     *  2、如果 entry 为null 说明没有待刷新的元素，不执行任何操作
+     *  2、如果 entry 为 null 说明没有待刷新的元素，不执行任何操作
      *  3、如果 entry 不为 null，说明有需要被刷新的元素
      *  4、如果 flushedEntry == null 说明当前没有正在刷新的任务，则把 entry 设置为 flushedEntry 刷新的起点。
      *  5、循环设置 entry， 设置这些 entry 状态设置为非取消状态，如果设置失败，则把这些entry 节点取消并使 totalPendingSize 减去这个节点的字节大小。
@@ -226,6 +251,11 @@ public final class ChannelOutboundBuffer {
         incrementPendingOutboundBytes(size, true);
     }
 
+    /**
+     * one-to-zero:
+     *  计算 {@link #totalPendingSize} 加上新增的 msg 大小后，是否超过了默认的高水位线 {@link WriteBufferWaterMark#DEFAULT_HIGH_WATER_MARK}
+     *  超过了则将参数 invokeLater 传入调用 {@link #setUnwritable(boolean)}
+     */
     private void incrementPendingOutboundBytes(long size, boolean invokeLater) {
         if (size == 0) {
             return;
@@ -256,6 +286,10 @@ public final class ChannelOutboundBuffer {
         }
     }
 
+    /**
+     * one-to-zero:
+     *  返回消息的字节数大小
+     */
     private static long total(Object msg) {
         if (msg instanceof ByteBuf) {
             return ((ByteBuf) msg).readableBytes();
@@ -414,6 +448,7 @@ public final class ChannelOutboundBuffer {
                     progress(readableBytes);
                     writtenBytes -= readableBytes;
                 }
+                /** 删除 {@link #totalPendingSize} 值  */
                 remove();
             } else { // readableBytes > writtenBytes
                 if (writtenBytes != 0) {
@@ -463,21 +498,33 @@ public final class ChannelOutboundBuffer {
      * @param maxBytes A hint toward the maximum number of bytes to include as part of the return value. Note that this
      *                 value maybe exceeded because we make a best effort to include at least 1 {@link ByteBuffer}
      *                 in the return value to ensure write progress is made.
+     * @return  返回的是被刷新后还未写入的 Entry
+     *
+     * one-to-zero：
+     *   nioBuffers 方法，返回的是被刷新后还未写入的Entry
+     *
+     *
      */
     public ByteBuffer[] nioBuffers(int maxCount, long maxBytes) {
         assert maxCount > 0;
         assert maxBytes > 0;
         long nioBufferSize = 0;
         int nioBufferCount = 0;
+
+        /* 获取线程本地变量中存放的 nioBuffers[] 数组，用来存放被刷新的 Entry 中的 ByteBuffer */
         final InternalThreadLocalMap threadLocalMap = InternalThreadLocalMap.get();
         ByteBuffer[] nioBuffers = NIO_BUFFERS.get(threadLocalMap);
+
+        /* 循环，直到 Entry 未被刷新，并且内部消息是 ByteBuf */
         Entry entry = flushedEntry;
         while (isFlushedEntry(entry) && entry.msg instanceof ByteBuf) {
+            /* 判断该 Entry 是否被取消 */
             if (!entry.cancelled) {
                 ByteBuf buf = (ByteBuf) entry.msg;
                 final int readerIndex = buf.readerIndex();
                 final int readableBytes = buf.writerIndex() - readerIndex;
 
+                /* 从 Entry 的 msg 中得到 ByteBuf 信息，可能一个 ByteBuf 里面包含了多个 CompositeByteBuf()。然后放入到 nioBuffers 中 */
                 if (readableBytes > 0) {
                     if (maxBytes - readableBytes < nioBufferSize && nioBufferCount != 0) {
                         // If the nioBufferSize + readableBytes will overflow maxBytes, and there is at least one entry
@@ -676,6 +723,14 @@ public final class ChannelOutboundBuffer {
         }
     }
 
+    /**
+     * one-to-zero:
+     *  true:   将调用 pipeline.fireChannelWritabilityChanged() 作为一个 task 添加到 queue 中，延迟调用该方法
+     *  false:  立马执行 pipeline.fireChannelWritabilityChanged() 方法
+     *
+     * 所以如果需要在写入达到水位线的时候做什么操作，就可以让 handler 重写 fireChannelWritabilityChanged 方法
+     *
+     */
     private void fireChannelWritabilityChanged(boolean invokeLater) {
         final ChannelPipeline pipeline = channel.pipeline();
         if (invokeLater) {

@@ -1420,7 +1420,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
          *
          * 说了这么多都还没有说 auto-read 作用，它是可以控制当前 netty 是否还从 channel 内核中的缓冲区读取数据，测试下来，如果在 channelRead 方法中读取了数据，
          * 然后调用 ctx.channel().config().setAutoRead(false);  那么 netty 就不会对当前的 channel-READ 事件感兴趣，所以就不会读取内核数据，
-         * 这样可以减缓发送方发送数据的 频率 ，具体还是参考 上面的链接
+         * 这样可以减缓发送方发送数据的 频率，因为不读取数据，会导致 TCP 读缓冲区满，从而减缓发送发的发送速度，具体还是参考 上面的链接
          *
          * 如果设置 auto-read 为 false，则下面这个方法不会被调用
          *

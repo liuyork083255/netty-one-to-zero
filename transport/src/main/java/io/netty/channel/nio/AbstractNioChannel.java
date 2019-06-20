@@ -375,7 +375,9 @@ public abstract class AbstractNioChannel extends AbstractChannel {
              *      NIO 的写事件大部分时候是不需要注册的，只有当 TCP 缓冲区达到水位线了，不能写入了，才需要注册写事件。
              *      当缓冲区有空间了，NIO 就会触发写事件。
              *
-             *
+             *  网上说 isFlushPending 方法是用来判断 socket 缓冲区是否已经达到高水位线，貌似利用 WRITE 事件实现，
+             *  也就是平时基本都不注册 WRITE，但是一旦注册了，说明写入紧张，这一次刷新就先调用，缓冲一个 event-loop 时间，
+             *  反正下一次轮训的时候，就会强制执行 WRITE
              */
             if (!isFlushPending()) {
                 super.flush0();
