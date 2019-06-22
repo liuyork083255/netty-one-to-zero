@@ -145,6 +145,10 @@ public final class ChannelOutboundBuffer {
      *  原因：
      *      write 一个 "hello" 字符串，那么字节数为 5，但是每一个 Entry 计算都会将大小加上 {@link #CHANNEL_OUTBOUND_BUFFER_ENTRY_OVERHEAD}，默认96，
      *      所以这个时候字节数为 96 + 5 ，代码在 {@link ChannelOutboundBuffer.Entry#newInstance}（现在还不清楚为什么会这么做？？？）
+     *      这么做的原因是为了本地安全着想，
+     *      假如用户调用了 N 次 write 方法，每次写入 M 个字节，所以用户可能会想当然根据自己的内存大小计算，一共可以写入多少
+     *      字节，让还没有发送出去的数据待在内存中是安全的。但是很遗憾，netty 根据写入的数据，并不是按字节存储，而是按 {@link Entry} 存储，
+     *      所以缓存的时候必须还要考虑调用了 N 次 write，就有 N 个 Entry 对象本身大小
      *
      *  当调用 flush 后，数据写入到 socket 中，则该值初始为 0
      *
@@ -362,6 +366,7 @@ public final class ChannelOutboundBuffer {
         if (!e.cancelled) {
             // only release message, notify and decrement if it was not canceled before.
             ReferenceCountUtil.safeRelease(msg);
+            /* 此处就是设置 promise 状态为 done，并且会调用所有监听器 */
             safeSuccess(promise);
             decrementPendingOutboundBytes(size, false, true);
         }
@@ -922,6 +927,11 @@ public final class ChannelOutboundBuffer {
     /**
      * one-to-zero:
      *  由于 Entry 使用比较频繁，会频繁的创建和销毁，这里使用了 Entry 的对象池，创建的时候从缓存中获取，销毁时回收。
+     *  它是对真实的写消息数据以及其相关信息的一个封装
+     *
+     *
+     *
+     *
      */
     static final class Entry {
         /**
@@ -937,13 +947,32 @@ public final class ChannelOutboundBuffer {
 
         private final Handle<Entry> handle;
         Entry next;
+        /**
+         * 原始待发送消息对象的引用
+         */
         Object msg;
         ByteBuffer[] bufs;
         ByteBuffer buf;
         ChannelPromise promise;
         long progress;
+        /**
+         * 记录需要发送数据的真实大小
+         * Note：不管发送的是 FileRegion 还是 ByteBuffer 对象，记录的是真实发送数据的大小
+         */
         long total;
+        /**
+         * 记录有该 ByteBuf or ByteBufs 中待发送数据大小 和 对象本身内存大小 的累加和
+         * Note：如果是发送 FileRegion 对象，pendingSize 只有对象本身内存大小，即真实的数据大小被标记为0；
+         *
+         * 什么是 对象本身内存大小 ？
+         * 在 64 HotSpot VM 中，要求对象的起始两个位置必须是 8 的整数倍，也就是对象内存大小必须是8的倍数，如果最终字节数不为8的倍数，则 padding 会补足至8的倍数。
+         * 其中：对象头的长度占16字节；引用属性占8字节；long类型占8字节；int类型占4字节；boolean类型占1字节。
+         *
+         */
         int pendingSize;
+        /**
+         *  写消息数据个数的记录（如果写消息数据是个数组的话，该值会大于1）
+         */
         int count = -1;
         boolean cancelled;
 

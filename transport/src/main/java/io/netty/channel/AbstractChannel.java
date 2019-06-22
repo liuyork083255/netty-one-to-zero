@@ -928,7 +928,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             /*
              * one-to-zero:
              *  write 方法其实就是把写入的数据 msg 和 promise 放在缓冲对象 outboundBuffer 中，
-             *  msg 和promise 在 outboundBuffer 中的存在形式是一个自定义的结构体 Entry。
+             *  msg 和 promise 在 outboundBuffer 中的存在形式是一个自定义的结构体 Entry。
              *  也就是说调用 write 方法实际上并不是真的将消息写出去, 而是将消息和此次操作的 promise 放入到了一个队列中
              */
             outboundBuffer.addMessage(msg, size, promise);

@@ -43,6 +43,9 @@ import static io.netty.util.internal.ObjectUtil.checkPositiveOrZero;
  */
 public final class WriteBufferWaterMark {
 
+    /**
+     * 这两个水位线大小包括了 {@link io.netty.channel.ChannelOutboundBuffer.Entry} 对象的内存大小 + msg 字节数
+     */
     private static final int DEFAULT_LOW_WATER_MARK = 32 * 1024;
     private static final int DEFAULT_HIGH_WATER_MARK = 64 * 1024;
 

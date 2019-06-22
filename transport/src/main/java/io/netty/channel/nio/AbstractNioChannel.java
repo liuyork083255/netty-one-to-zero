@@ -19,14 +19,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.AbstractChannel;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelException;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelPromise;
-import io.netty.channel.ConnectTimeoutException;
-import io.netty.channel.EventLoop;
+import io.netty.channel.*;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.ReferenceCounted;
 import io.netty.util.internal.logging.InternalLogger;
@@ -372,7 +365,8 @@ public abstract class AbstractNioChannel extends AbstractChannel {
              *  所以缓冲一下写入的速度
              *
              *  Note：
-             *      NIO 的写事件大部分时候是不需要注册的，只有当 TCP 缓冲区达到水位线了，不能写入了，才需要注册写事件。
+             *      NIO 的写事件大部分时候是不需要注册的，只有当 TCP 缓冲区写入失败，才需要注册写事件。
+             *      因为在 {@link io.netty.channel.socket.nio.NioSocketChannel#doWrite(ChannelOutboundBuffer)} 方法中写入 socket 失败就会调用 incompleteWrite(true)
              *      当缓冲区有空间了，NIO 就会触发写事件。
              *
              *  网上说 isFlushPending 方法是用来判断 socket 缓冲区是否已经达到高水位线，貌似利用 WRITE 事件实现，

@@ -307,6 +307,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
      *      表示需要注册一个 WRITE 事件在 selector 上，NIO 的写事件大部分时候是不需要注册的，如果注册了，说明情况特殊，需要特殊处理
      *      netty 在 select 出的事件类型是 WRITE 的时候，那么会任务这个写操作很特殊，紧急，
      *      所以会强行把数据写入 socket，详见 {@link NioEventLoop#processSelectedKey(SelectionKey, AbstractNioChannel)} 中的 WRITE 事件处理逻辑，是调用 forceFlush 方法
+     *      Note：目前发现，如果是数据写入 TCP 失败，才会注册这个 WRITE 事件。
      *
      *  false:
      *      取消 WRITE 事件

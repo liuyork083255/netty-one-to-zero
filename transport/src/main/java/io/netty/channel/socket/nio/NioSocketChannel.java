@@ -418,6 +418,11 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
 
             // Always us nioBuffers() to workaround data-corruption.
             // See https://github.com/netty/netty/issues/2761
+            /**
+             * nioBufferCnt = 0 可以理解本次写入的是 文件 FileRegion 类型
+             * nioBufferCnt = 1 则写入的只有一个 byteBuf，可以理解为 用户只调用了一次 write 或者 writeAndFlush
+             * nioBufferCnt = 0 则写入的多个 byteBuf，采用聚集 gathering 写入，可以理解为 用户调用了多次 write
+             */
             switch (nioBufferCnt) {
                 case 0:
                     // We have something else beside ByteBuffers to write so fallback to normal writes.
@@ -473,6 +478,7 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
                      * one-to-zero:
                      *  删除 ChannelOutboundBuffer 中的 Entry
                      *  同时删除 {@link ChannelOutboundBuffer#totalPendingSize}
+                     *  主要的是这里会设置 promise 状态为 done
                      */
                     in.removeBytes(localWrittenBytes);
 
