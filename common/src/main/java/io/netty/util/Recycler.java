@@ -35,6 +35,22 @@ import static java.lang.Math.min;
  * Light-weight object pool based on a thread-local stack.
  *
  * @param <T> the type of the pooled object
+ * @author
+ *
+ * one-to-zero:
+ *  基于 thread-local 实现的轻量级内存对象池
+ *  这个类在 ChannelOutboundBuffer、PooledHeapByteBuf 和 PooledDirectByteBuf 中都有使用到。
+ *
+ *  Recycler 是一个抽象类，向外部提供了两个公共方法 get 和 recycle 分别用于从对象池中获取对象和回收对象；
+ *  另外还提供了一个 protected 的抽象方法 newObject，newObject 用于在内存池中没有可用对象的时候创建新的对象，
+ *  由用户自己实现，Recycler 以泛型参数的形式让用户传入具体要池化的对象类型
+ *
+ * Recycler 内部主要包含三个核心组件，各个组件负责对象池实现的具体部分
+ *  1 {@link Handle}
+ *  2 {@link WeakOrderQueue}
+ *  3 {@link Stack}
+ *
+ *
  */
 public abstract class Recycler<T> {
 
@@ -152,14 +168,22 @@ public abstract class Recycler<T> {
         }
     }
 
+    /**
+     * one-to-zero:
+     *  向外部提供可以复用的对象，是从对象池获取的
+     */
     @SuppressWarnings("unchecked")
     public final T get() {
         if (maxCapacityPerThread == 0) {
             return newObject((Handle<T>) NOOP_HANDLE);
         }
+        /* 从当前线程中获取 stack，因为 netty 中的每一个 IO 线程都关联着一个对象池，直接关联着 stack */
         Stack<T> stack = threadLocal.get();
+
+        /* 先看看池中是否有可用对象，如果有则直接返回 */
         DefaultHandle<T> handle = stack.pop();
         if (handle == null) {
+            /* 如果没有则新创建一个 Handle，并且调用 newObject 来新创建一个对象并且放入 Handler 的 value 中，newObject 由用户自己实现。 */
             handle = stack.newHandle();
             handle.value = newObject(handle);
         }
@@ -194,17 +218,38 @@ public abstract class Recycler<T> {
 
     protected abstract T newObject(Handle<T> handle);
 
+    /**
+     * one-to-zero:
+     *  Handle 主要提供一个 recycle 接口，用于提供对象回收的具体实现
+     *  默认实现 {@link DefaultHandle}
+     */
     public interface Handle<T> {
+        /**
+         * one-to-zero:
+         *  回收对象
+         *  Note:
+         *      由于这是内存池的实现，所以回收不是交给 GC 处理，而是缓存起来。
+         */
         void recycle(T object);
     }
 
+    /**
+     * one-to-zero:
+     *  每个 Handle 关联一个 value 字段，用于存放具体的池化对象
+     *  Note:
+     *      在对象池中，所有的池化对象都被这个 Handle 包装，Handle 是对象池管理的基本单位。
+     *      另外 Handle 指向这对应的 Stack，对象存储也就是 Handle 存储的具体地方由 Stack 维护和管理。
+     *
+     */
     static final class DefaultHandle<T> implements Handle<T> {
         private int lastRecycledId;
         private int recycleId;
 
         boolean hasBeenRecycled;
 
+        /* handler 指向的 stack */
         private Stack<?> stack;
+        /* 每个Handle关联一个value字段，用于存放具体的池化对象 */
         private Object value;
 
         DefaultHandle(Stack<?> stack) {
@@ -236,6 +281,16 @@ public abstract class Recycler<T> {
 
     // a queue that makes only moderate guarantees about visibility: items are seen in the correct order,
     // but we aren't absolutely guaranteed to ever see anything at all, thereby keeping the queue cheap to maintain
+
+    /**
+     * one-to-zero:
+     *  WeakOrderQueue 的功能可以由两个接口体现，add 和 transfer;
+     *  add:        add 用于将 handler（对象池管理的基本单位）放入队列
+     *  transfer:   transfer 用于向 stack 输入可以被重复使用的对象。
+     *
+     *  我们可以把 WeakOrderQueue 看做一个对象仓库，stack 内只维护一个 Handle 数组用于直接向 Recycler 提供服务，
+     *  当从这个数组中拿不到对象的时候则会寻找对应 WeakOrderQueue 并调用其 transfer 方法向 stack 供给对象。
+     */
     private static final class WeakOrderQueue {
 
         static final WeakOrderQueue DUMMY = new WeakOrderQueue();
@@ -348,6 +403,10 @@ public abstract class Recycler<T> {
                     ? newQueue(stack, thread) : null;
         }
 
+        /**
+         * one-to-zero:
+         *  add 用于将 handler（对象池管理的基本单位）放入队列
+         */
         void add(DefaultHandle<?> handle) {
             handle.lastRecycledId = id;
 
@@ -376,6 +435,10 @@ public abstract class Recycler<T> {
 
         // transfer as many items as we can from this queue to the stack, returning true if any were transferred
         @SuppressWarnings("rawtypes")
+        /**
+         * one-to-zero:
+         *  transfer 用于向 stack 输入可以被重复使用的对象
+         */
         boolean transfer(Stack<?> dst) {
             Link head = this.head.link;
             if (head == null) {
@@ -444,6 +507,12 @@ public abstract class Recycler<T> {
         }
     }
 
+    /**
+     * one-to-zero:
+     *  Stack 具体维护着对象池数据，向 Recycler 提供 push 和 pop 两个主要访问接口;
+     *      pop 用于从内部弹出一个可被重复使用的对象;
+     *      push 用于回收以后可以重复使用的对象。
+     */
     static final class Stack<T> {
 
         // we keep a queue of per-thread queues, which is appended to once only, each time a new thread other
