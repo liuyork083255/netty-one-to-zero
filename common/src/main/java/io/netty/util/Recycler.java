@@ -56,8 +56,22 @@ import static java.lang.Math.min;
  *      因为在创建对象的时候，JVM 做了很多操作，比如：验证，内存分配，GC
  *      对象进行重用，不会大量创建对象，减少 GC 压力
  *
+ * 分析 netty 设计这个对象池的目的：
+ *  对象池简单说就是将对象实例缓存起来供后续分配使用来避免瞬时大量小对象反复生成和消亡造成分配和GC压力。
+ *  在设计时可以简单的做如下推导：
+ *      1 首先考虑单线程的情况，此时简单的构建一个List容器，对象回收时放入list，分配时从list取出即可。这种方式非常容易就构建了一个单线程的对象池实现。
+ *      2 接着考虑多线程的情况，分配时与单线程情况相同，从当前线程的List容器中取出一个对象分配即可。
+ *        回收时却遇到了麻烦，可能对象回收时的线程和分配时线程一致，那情况与单线程一致。如果不一致，此时存在不同的策略选择。
+ *          策略一: 将对象回收至分配线程的List容器中
+ *          策略二: 将对象回收至本线程的list容器，当成本线程的对象使用
+ *          策略三: 将对象暂存于本线程，在后续合适时机归还至分配线程。
  *
+ *      每一种策略均各有特点，
+ *          策略一，需要采用MPSC队列（或类似结构）来作为存储容器，因为会有多个线程并发回收对象的情况。如果采用MPSC队列，伴随着不停的分配和回收，MPSC队列内部的节点也是不停的生成和消亡，变相降低了内存池的效果。
+ *          策略二，如果线程呈现明显的分配和回收分工则会导致缓存池失去作用。因为分配线程总是无法回收到对象，进而分配时都是新生成对象；而回收线程因为很少分配对象，导致回收的对象超出上限被抛弃也很少得到使用。
+ *          策略三，由于对象暂存于本线程，可以避开在回收时的并发竞争。也不会出现策略2导致的失效问题。Netty采取的就是策略三。
  *
+ *  Netty 没有采用全局的缓存池，也就是避免线程并发获取和回收降低了性能 !!!
  *
  */
 public abstract class Recycler<T> {
@@ -248,13 +262,16 @@ public abstract class Recycler<T> {
         if (maxCapacityPerThread == 0) {
             return newObject((Handle<T>) NOOP_HANDLE);
         }
-        /**
+        /*
          * 从当前线程中获取 stack
          * 如果是第一次调用 stack，那么会初始化创建 Stack
          */
         Stack<T> stack = threadLocal.get();
 
-        /* 先看看池中是否有可用对象，如果有则直接返回 */
+        /*
+         * 1 先看看 stack 数组中是否有可用对象，如果有则直接返回
+         * 2 如果没有则遍历 stack 在别的线程中的 WeakOrderQueue，有则将对象放入 stack 中并返回，没有找到则返回 null
+         */
         DefaultHandle<T> handle = stack.pop();
         if (handle == null) {
             /* 创建 DefaultHandle 对象 */
@@ -435,7 +452,7 @@ public abstract class Recycler<T> {
              * 指定读操作的 Link 节点，
              *  eg. Head -> Link1 -> Link2
              *  假设此时的读操作在 Link2 上进行时，则此处的 link == Link2，见 transfer(Stack dst),
-             *  实际上此时 Link1 已经被读完了，Link1变成了垃圾
+             *  实际上此时 Link1 已经被读完了，Link1 变成了垃圾
              *  （一旦一个Link的读指针指向了最后，则该 Link 不会被重复利用，而是被 GC 掉，之后回收空间，新建 Link 再进行操作）
              */
             Link link;
@@ -467,6 +484,10 @@ public abstract class Recycler<T> {
                 }
             }
 
+            /**
+             * one-to-zero:
+             *  回收空间
+             */
             void reclaimSpace(int space) {
                 assert space >= 0;
                 availableSharedCapacity.addAndGet(space);
@@ -480,18 +501,23 @@ public abstract class Recycler<T> {
                 return reserveSpace(availableSharedCapacity, space);
             }
 
-
+            /**
+             * one-to-zero:
+             *  在剩余的 availableSharedCapacity 大小中分配 space 个
+             */
             static boolean reserveSpace(AtomicInteger availableSharedCapacity, int space) {
                 assert space >= 0;
                 for (;;) {
                     /* cas + 无限重试进行 分配 */
                     int available = availableSharedCapacity.get();
+                    /* 如果剩余 10 个空间，结果 space 要求分配 20，自然分配失败 */
                     if (available < space) {
                         return false;
                     }
                     /*
                      * 注意：这里使用的是 AtomicInteger，当这里的 availableSharedCapacity 发生变化时，
                      * 实际上就是改变的 stack.availableSharedCapacity 的 int value 属性的值
+                     * 分配成功之后，availableSharedCapacity 会减小
                      */
                     if (availableSharedCapacity.compareAndSet(available, available - space)) {
                         return true;
@@ -613,7 +639,7 @@ public abstract class Recycler<T> {
             /*
              * 如果使用者在将 DefaultHandle 对象压入队列后，将 Stack 设置为 null，
              * 但是此处的 DefaultHandle 是持有 stack 的强引用的，则 Stack 对象无法回收；
-             * 而且由于此处 DefaultHandle 是持有 stack 的强引用，WeakHashMap 中对应 stack的 WeakOrderQueue 也无法被回收掉了，导致内存泄漏。
+             * 而且由于此处 DefaultHandle 是持有 stack 的强引用，WeakHashMap 中对应 stack 的 WeakOrderQueue 也无法被回收掉了，导致内存泄漏。
              */
             handle.stack = null;
             // we lazy set to ensure that setting stack to null appears before we unnull it in the owning thread;
@@ -626,18 +652,28 @@ public abstract class Recycler<T> {
             return tail.readIndex != tail.get();
         }
 
-        // transfer as many items as we can from this queue to the stack, returning true if any were transferred
-        @SuppressWarnings("rawtypes")
         /**
          * one-to-zero:
          *  transfer 用于向 stack 输入可以被重复使用的对象
+         *  也就是将别的线程中的 WeakOrderQueue 对象中可重用的 handle 转移到所属的 stack 中
+         *
+         *  true:   表示有转移成功的
+         *  false:  表示没有从 queue 转移数据到 stack
          */
+        // transfer as many items as we can from this queue to the stack, returning true if any were transferred
+        @SuppressWarnings("rawtypes")
         boolean transfer(Stack<?> dst) {
+            /* 寻找第一个Link（Head不是Link） */
             Link head = this.head.link;
+            /* head == null，表示只有Head一个节点，没有存储数据的节点，直接返回 */
             if (head == null) {
                 return false;
             }
-
+            /*
+             * 如果第一个 Link 节点的 readIndex 索引已经到达 该 Link 对象的 DefaultHandle[] 的尾部，
+             * 则判断当前的 Link 节点的下一个节点是否为 null，如果为 null，说明已经达到了 Link 链表尾部，直接返回，
+             * 否则，将当前的 Link 节点的下一个 Link 节点赋值给 head 和 this.head.link，进而对下一个 Link 节点进行操作
+             */
             if (head.readIndex == LINK_CAPACITY) {
                 if (head.next == null) {
                     return false;
@@ -645,52 +681,75 @@ public abstract class Recycler<T> {
                 this.head.link = head = head.next;
             }
 
+            /* 获取 Link 节点的 readIndex, 即当前的 Link 节点的第一个有效元素的位置 */
             final int srcStart = head.readIndex;
+            /* 获取 Link 节点的 writeIndex，即当前的 Link 节点的最后一个有效元素的位置 */
             int srcEnd = head.get();
+            /* 计算 Link 节点中可以被转移的元素个数 */
             final int srcSize = srcEnd - srcStart;
             if (srcSize == 0) {
                 return false;
             }
 
+            /* 获取转移元素的目的地 Stack 中当前的元素个数 */
             final int dstSize = dst.size;
+            /* 计算期盼的容量 */
             final int expectedCapacity = dstSize + srcSize;
 
+            /*
+             * 如果 expectedCapacity 大于目的地 Stack 的长度
+             * 1、对目的地 Stack 进行扩容
+             * 2、计算 Link 中最终的可转移的最后一个元素的下标
+             */
             if (expectedCapacity > dst.elements.length) {
                 final int actualCapacity = dst.increaseCapacity(expectedCapacity);
                 srcEnd = min(srcStart + actualCapacity - dstSize, srcEnd);
             }
 
             if (srcStart != srcEnd) {
+                /* 获取 Link 节点的 DefaultHandle[] */
                 final DefaultHandle[] srcElems = head.elements;
+                /* 获取目的地 Stack 的 DefaultHandle[] */
                 final DefaultHandle[] dstElems = dst.elements;
+                /* dst 数组的大小，会随着元素的迁入而增加，如果最后发现没有增加，那么表示没有迁移成功任何一个元素 */
                 int newDstSize = dstSize;
                 for (int i = srcStart; i < srcEnd; i++) {
                     DefaultHandle element = srcElems[i];
+                    /* 设置 element.recycleId 或者 进行防护性判断 */
                     if (element.recycleId == 0) {
                         element.recycleId = element.lastRecycledId;
                     } else if (element.recycleId != element.lastRecycledId) {
                         throw new IllegalStateException("recycled already");
                     }
+                    /* 置空 Link 节点的 DefaultHandle[i] */
                     srcElems[i] = null;
-
+                    /* 扔掉放弃 7/8 的元素 */
                     if (dst.dropHandle(element)) {
                         // Drop the object.
                         continue;
                     }
+                    /* 将可转移成功的 DefaultHandle 元素的 stack 属性设置为目的地 Stack */
                     element.stack = dst;
+                    /* 将 DefaultHandle 元素转移到目的地 Stack 的 DefaultHandle[newDstSize ++]中 */
                     dstElems[newDstSize ++] = element;
                 }
 
                 if (srcEnd == LINK_CAPACITY && head.next != null) {
                     // Add capacity back as the Link is GCed.
                     this.head.reclaimSpace(LINK_CAPACITY);
+                    /*
+                     * 将 Head 指向下一个 Link，也就是将当前的 Link 给回收掉了
+                     * 假设之前为 Head -> Link1 -> Link2，回收之后为 Head -> Link2
+                     */
                     this.head.link = head.next;
                 }
-
+                /* 重置 readIndex */
                 head.readIndex = srcEnd;
+                /* 表示没有被回收任何一个对象，直接返回 */
                 if (dst.size == newDstSize) {
                     return false;
                 }
+                /* 将新的 newDstSize 赋值给目的地 Stack 的 size */
                 dst.size = newDstSize;
                 return true;
             } else {
@@ -768,6 +827,11 @@ public abstract class Recycler<T> {
          * 则当 ++handleRecycleCount = 0/8/16/...时，元素被回收，其余的元素直接被 drop
          */
         private int handleRecycleCount = -1; // Start with -1 so the first one will be recycled.
+
+        /**
+         * cursor：当前操作的 WeakOrderQueue
+         * prev：cursor的前一个 WeakOrderQueue
+         */
         private WeakOrderQueue cursor, prev;
 
         /**
@@ -827,15 +891,25 @@ public abstract class Recycler<T> {
             head = queue;
         }
 
+        /**
+         * 对 stack 中的数组 {@link Stack#elements} 进行扩容
+         */
         int increaseCapacity(int expectedCapacity) {
+            /* 获取旧数组长度 */
             int newCapacity = elements.length;
+            /* 获取最大长度 */
             int maxCapacity = this.maxCapacity;
+            /* 不断扩容（每次扩容2倍），直到达到 expectedCapacity 或者新容量已经大于等于 maxCapacity */
             do {
+                /* 扩容2倍 */
                 newCapacity <<= 1;
             } while (newCapacity < expectedCapacity && newCapacity < maxCapacity);
 
+            /* 上述的扩容有可能使新容量 newCapacity > maxCapacity，这里取最小值 */
             newCapacity = min(newCapacity, maxCapacity);
+            /* 如果新旧容量不相等，进行实际扩容 */
             if (newCapacity != elements.length) {
+                /* 创建新数组，复制旧数组元素到新数组，并将新数组赋值给 Stack.elements */
                 elements = Arrays.copyOf(elements, newCapacity);
             }
 
@@ -844,17 +918,22 @@ public abstract class Recycler<T> {
 
         /**
          * one-to-zero:
+         *  1 先看看 stack 数组中是否有可用对象，如果有则直接返回
+         *  2 如果没有则遍历 stack 在别的线程中的 WeakOrderQueue，有则将对象放入 stack 中并返回，没有找到则返回 null
          */
         @SuppressWarnings({ "unchecked", "rawtypes" })
         DefaultHandle<T> pop() {
             int size = this.size;
+
+            /* 如果 size=0；说明 stack 的数组中没有可重用的对象 */
             if (size == 0) {
+                /* 遍历 stack 在别的线程中的 WeakOrderQueue */
                 if (!scavenge()) {
                     return null;
                 }
                 /**
                  * 由于在transfer(Stack<?> dst)的过程中，可能会将其他线程的 WeakOrderQueue 中的 DefaultHandle 对象传递到当前的 Stack,
-                 * 所以size发生了变化，需要重新赋值
+                 * 所以 size 发生了变化，需要重新赋值
                  */
                 size = this.size;
             }
@@ -873,6 +952,12 @@ public abstract class Recycler<T> {
             return ret;
         }
 
+        /**
+         * one-to-zero:
+         *  遍历 stack 在别的线程中的 WeakOrderQueue 是否有可重用的对象
+         *  true：有
+         *  false：没有
+         */
         boolean scavenge() {
             // continue an existing scavenge, if any
             if (scavengeSome()) {
@@ -885,12 +970,19 @@ public abstract class Recycler<T> {
             return false;
         }
 
+        /**
+         * 遍历其余线程所属 stack 的 queue 中是否有可重用对象，
+         * 如果有：则转移到 stack 中，并且返回 true
+         * 如果没有：则返回 false
+         */
         boolean scavengeSome() {
             WeakOrderQueue prev;
+            /* 程序第一次获取是没有 WeakOrderQueue，所以 cursor 是 null */
             WeakOrderQueue cursor = this.cursor;
             if (cursor == null) {
                 prev = null;
                 cursor = head;
+                /* 如果 head == null，表示当前的 Stack 对象没有 WeakOrderQueue，直接返回 */
                 if (cursor == null) {
                     return false;
                 }
@@ -900,15 +992,27 @@ public abstract class Recycler<T> {
 
             boolean success = false;
             do {
+                /*
+                 * 如果线程A 获取对象，那么 stack 中没有，则会在别的线程中的 queue 查找
+                 * 这个 transfer 方法的参数 this 就是线程A 的 stack
+                 * 如果转移成功，则直接返回 true
+                 * 否则继续寻找下一个 queue
+                 */
                 if (cursor.transfer(this)) {
                     success = true;
                     break;
                 }
+                /* 遍历下一个 WeakOrderQueue，这个 queue 则是另外一个线程的 */
                 WeakOrderQueue next = cursor.next;
                 if (cursor.owner.get() == null) {
                     // If the thread associated with the queue is gone, unlink it, after
                     // performing a volatile read to confirm there is no data left to collect.
                     // We never unlink the first queue, as we don't want to synchronize on updating the head.
+                    /*
+                     * 如果当前的 WeakOrderQueue 的线程已经不可达了，则
+                     * 1、如果该 WeakOrderQueue 中有数据，则将其中的数据全部转移到当前 Stack 中
+                     * 2、将当前的 WeakOrderQueue 的前一个节点 prev 指向当前的 WeakOrderQueue 的下一个节点，即将当前的 WeakOrderQueue 从 Queue 链表中移除。方便后续GC
+                     */
                     if (cursor.hasFinalData()) {
                         for (;;) {
                             if (cursor.transfer(this)) {
