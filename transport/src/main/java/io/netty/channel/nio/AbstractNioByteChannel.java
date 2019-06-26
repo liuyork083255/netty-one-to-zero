@@ -144,6 +144,9 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
             try {
                 do {
                     byteBuf = allocHandle.allocate(allocator);
+                    /**
+                     * 进入 {@link io.netty.channel.socket.nio.NioSocketChannel#doReadBytes(ByteBuf)}
+                     */
                     allocHandle.lastBytesRead(doReadBytes(byteBuf));
                     if (allocHandle.lastBytesRead() <= 0) {
                         System.out.println("========================由于重复代码所以自己加一点防止警告线=========================");

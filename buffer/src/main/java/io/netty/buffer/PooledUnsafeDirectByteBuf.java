@@ -163,7 +163,7 @@ final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
         if (length == 0) {
             return 0;
         }
-
+        System.out.println("liu york");
         ByteBuffer tmpBuf;
         if (internal) {
             tmpBuf = internalNioBuffer();
@@ -185,7 +185,7 @@ final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
         if (length == 0) {
             return 0;
         }
-
+        System.out.println("liu york");
         ByteBuffer tmpBuf = internal ? internalNioBuffer() : memory.duplicate();
         index = idx(index);
         tmpBuf.clear().position(index).limit(index + length);
@@ -280,6 +280,7 @@ final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
 
     @Override
     public int setBytes(int index, ScatteringByteChannel in, int length) throws IOException {
+        System.out.println("======================== 防止重复代码警告 =========================");
         checkIndex(index, length);
         ByteBuffer tmpBuf = internalNioBuffer();
         index = idx(index);
@@ -297,6 +298,7 @@ final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
         ByteBuffer tmpBuf = internalNioBuffer();
         index = idx(index);
         tmpBuf.clear().position(index).limit(index + length);
+        System.out.println("liu york");
         try {
             return in.read(tmpBuf, position);
         } catch (ClosedChannelException ignored) {
@@ -381,6 +383,7 @@ final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
 
     @Override
     public ByteBuf writeZero(int length) {
+        System.out.println("liu york");
         ensureWritable(length);
         int wIndex = writerIndex;
         UnsafeByteBufUtil.setZero(addr(wIndex), length);

@@ -360,14 +360,14 @@ public final class NioEventLoop extends SingleThreadEventLoop {
      * netty中的queue
      * 使用了 MpscChunkedArrayQueue 对象，Mpsc含义就是 ：Multi Producer Single Consumer
      * 该队列是支持多生产单消费者的。该模型正好符合netty的线程执行模型，即可以有多个外部线程将任务提交给loop，而loop只有一个线程处理。
-     * MpscChunkedArrayQueue 有点：
+     * MpscChunkedArrayQueue 优点：
      *  1 取消了锁，通过自旋+cas来将任务存放到队列中，当然如果并发频率太高也会使得我们的cpu使用率比较高
      *  2 消除了伪共享，通过缓存填充方式，让一个任务就是一个完成的缓存行，从而不会影响别的数据
      *  3 这个是数组实现的，但是支持动态扩容
      *  4 网上做了一个测试，MpscChunkedArrayQueue 性能比 LinkedBlockingQueue 和 ArrayBlockingQueue 要好
      *
      * 为什么 LinkedBlockingQueue 和 ArrayBlockingQueue 容易缓存失效
-     *      LinkedBlockingQueue的head和last是相邻的，ArrayBlockingQueue的takeIndex和putIndex是相邻的;
+     *      LinkedBlockingQueue 的 head 和 last 是相邻的，ArrayBlockingQueue 的 takeIndex 和 putIndex是相邻的;
      *      而我们都知道CPU将数据加载到缓存实际上是按照缓存行加载的，因此可能出现明明没有修改last，
      *      但由于出列操作修改了head，导致整个缓存行失效，需要重新进行加载；
      */
