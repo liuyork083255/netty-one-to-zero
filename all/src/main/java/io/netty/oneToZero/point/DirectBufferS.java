@@ -17,7 +17,9 @@ package io.netty.oneToZero.point;
  *
  * 不管是直接内存还是堆内存，netty 都对它们做了池化，
  *  DirectBuffer 的池化实现对象是 {@link io.netty.buffer.PooledDirectByteBuf}
+ *               非池化{@link io.netty.buffer.UnpooledDirectByteBuf}
  *  HeapBuffer 的池化实现兑现是 {@link io.netty.buffer.PooledHeapByteBuf}
+ *               非池化{@link io.netty.buffer.UnpooledHeapByteBuf}
  *
  */
 public class DirectBufferS {

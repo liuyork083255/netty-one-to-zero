@@ -34,11 +34,32 @@ import static io.netty.util.internal.ObjectUtil.checkNotNull;
  * Big endian Java heap buffer implementation. It is recommended to use
  * {@link UnpooledByteBufAllocator#heapBuffer(int, int)}, {@link Unpooled#buffer(int)} and
  * {@link Unpooled#wrappedBuffer(byte[])} instead of calling the constructor explicitly.
+ *
+ * one-to-zero:
+ *  堆内存缓存，建议使用
+ *      {@link UnpooledByteBufAllocator#heapBuffer(int, int)}
+ *      {@link Unpooled#buffer(int)}
+ *      {@link Unpooled#wrappedBuffer(byte[])}
+ *      方法创建，而不是直接使用构造方法
+ *
+ * 对应的分配器 {@link UnpooledByteBufAllocator}
+ *
  */
 public class UnpooledHeapByteBuf extends AbstractReferenceCountedByteBuf {
 
+    /**
+     * 分配器
+     */
     private final ByteBufAllocator alloc;
+
+    /**
+     * 底层字节数组
+     */
     byte[] array;
+
+    /**
+     * NIO 的 ByteBuffer 形式
+     */
     private ByteBuffer tmpNioBuf;
 
     /**
@@ -58,6 +79,7 @@ public class UnpooledHeapByteBuf extends AbstractReferenceCountedByteBuf {
         }
 
         this.alloc = alloc;
+        /* 直接创建一个固定长度的数组 */
         setArray(allocateArray(initialCapacity));
         setIndex(0, 0);
     }
@@ -80,10 +102,14 @@ public class UnpooledHeapByteBuf extends AbstractReferenceCountedByteBuf {
         }
 
         this.alloc = alloc;
+        /* 直接将参数数组赋值给属性 */
         setArray(initialArray);
         setIndex(0, initialArray.length);
     }
 
+    /**
+     * 直接创建一个长度为参数的数组
+     */
     protected byte[] allocateArray(int initialCapacity) {
         return new byte[initialCapacity];
     }

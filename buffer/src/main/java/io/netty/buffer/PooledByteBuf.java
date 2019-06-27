@@ -22,6 +22,16 @@ import io.netty.util.Recycler.Handle;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
+/**
+ *
+ * one-to-zero:
+ *  池化缓冲区的存储类型采用泛型
+ *      如果是 堆内存则采用 byte[]
+ *      如果是 对外存则采用 Java NIO ByteBuffer
+ *
+ *  不管是哪一类存储，它们的存储对象都是 {@link #memory}
+ *
+ */
 abstract class PooledByteBuf<T> extends AbstractReferenceCountedByteBuf {
 
     private final Recycler.Handle<PooledByteBuf<T>> recyclerHandle;

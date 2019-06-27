@@ -18,9 +18,17 @@ package io.netty.buffer;
 /**
  * Implementations are responsible to allocate buffers. Implementations of this interface are expected to be
  * thread-safe.
+ *
+ * one-to-zero:
+ *  默认实现 {@link AbstractByteBufAllocator}
+ *
  */
 public interface ByteBufAllocator {
 
+    /**
+     * one-to-zero:
+     *  系统初始化默认启动的时候会创建 分配器
+     */
     ByteBufAllocator DEFAULT = ByteBufUtil.DEFAULT_ALLOCATOR;
 
     /**
@@ -129,6 +137,12 @@ public interface ByteBufAllocator {
     /**
      * Calculate the new capacity of a {@link ByteBuf} that is used when a {@link ByteBuf} needs to expand by the
      * {@code minNewCapacity} with {@code maxCapacity} as upper-bound.
+     *
+     * one-to-zero:
+     *  对 byte-buf 进行扩容，前提是没有设置最大容量，那么默认是 {@link Integer#MAX_VALUE}
+     *  默认实现 {@link AbstractByteBufAllocator#calculateNewCapacity(int, int)}
+     *
+     *  返回值是计算过后的空间大小
      */
     int calculateNewCapacity(int minNewCapacity, int maxCapacity);
  }

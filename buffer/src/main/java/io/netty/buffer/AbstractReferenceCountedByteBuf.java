@@ -22,15 +22,23 @@ import io.netty.util.internal.ReferenceCountUpdater;
 
 /**
  * Abstract base class for {@link ByteBuf} implementations that count references.
+ * one-to-zero:
+ *  这个类主要实现引用计数相关方法
+ *
+ *  常见的实现类
+ *      {@link UnpooledHeapByteBuf}
  */
 public abstract class AbstractReferenceCountedByteBuf extends AbstractByteBuf {
-    private static final long REFCNT_FIELD_OFFSET =
-            ReferenceCountUpdater.getUnsafeOffset(AbstractReferenceCountedByteBuf.class, "refCnt");
-    private static final AtomicIntegerFieldUpdater<AbstractReferenceCountedByteBuf> AIF_UPDATER =
-            AtomicIntegerFieldUpdater.newUpdater(AbstractReferenceCountedByteBuf.class, "refCnt");
 
-    private static final ReferenceCountUpdater<AbstractReferenceCountedByteBuf> updater =
-            new ReferenceCountUpdater<AbstractReferenceCountedByteBuf>() {
+    private static final long REFCNT_FIELD_OFFSET = ReferenceCountUpdater.getUnsafeOffset(AbstractReferenceCountedByteBuf.class, "refCnt");
+
+    /**
+     * AtomicIntegerFieldUpdater 会让指定的 class 文件中的属性具有原子性
+     * 性能比 AtomicInteger 低
+     */
+    private static final AtomicIntegerFieldUpdater<AbstractReferenceCountedByteBuf> AIF_UPDATER = AtomicIntegerFieldUpdater.newUpdater(AbstractReferenceCountedByteBuf.class, "refCnt");
+
+    private static final ReferenceCountUpdater<AbstractReferenceCountedByteBuf> updater = new ReferenceCountUpdater<AbstractReferenceCountedByteBuf>() {
         @Override
         protected AtomicIntegerFieldUpdater<AbstractReferenceCountedByteBuf> updater() {
             return AIF_UPDATER;
@@ -41,7 +49,13 @@ public abstract class AbstractReferenceCountedByteBuf extends AbstractByteBuf {
         }
     };
 
+
     // Value might not equal "real" reference count, all access should be via the updater
+    /**
+     * one-to-zero:
+     *  记录 buffer 引用个数
+     *  在新版本中这个值可能不是真实的引用计数，如果访问真实值必须通过 updater 来间接获取
+     */
     @SuppressWarnings("unused")
     private volatile int refCnt = updater.initialValue();
 

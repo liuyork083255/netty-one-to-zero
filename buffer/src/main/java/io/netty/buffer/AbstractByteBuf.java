@@ -42,6 +42,8 @@ import static io.netty.util.internal.ObjectUtil.checkPositiveOrZero;
 
 /**
  * A skeletal implementation of a buffer.
+ * one-to-zero:
+ *  主要实现 ByteBuf 类中的方法
  */
 public abstract class AbstractByteBuf extends ByteBuf {
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(AbstractByteBuf.class);
@@ -67,10 +69,23 @@ public abstract class AbstractByteBuf extends ByteBuf {
     static final ResourceLeakDetector<ByteBuf> leakDetector =
             ResourceLeakDetectorFactory.instance().newResourceLeakDetector(ByteBuf.class);
 
+    /**
+     * one-to-zero:
+     *  定义读写索引
+     */
     int readerIndex;
     int writerIndex;
+
+    /**
+     * one-to-zero:
+     *  定义标记读写索引
+     */
     private int markedReaderIndex;
     private int markedWriterIndex;
+
+    /**
+     * 最大容量
+     */
     private int maxCapacity;
 
     protected AbstractByteBuf(int maxCapacity) {
@@ -214,17 +229,20 @@ public abstract class AbstractByteBuf extends ByteBuf {
     @Override
     public ByteBuf discardReadBytes() {
         ensureAccessible();
+        /* 如果读指针已经在 0 位置，那么不需要移动 */
         if (readerIndex == 0) {
             return this;
         }
 
         if (readerIndex != writerIndex) {
+            /* 移动数据至开始位置 */
             setBytes(0, this, readerIndex, writerIndex - readerIndex);
             writerIndex -= readerIndex;
             adjustMarkers(readerIndex);
             readerIndex = 0;
         } else {
             adjustMarkers(readerIndex);
+            /* 读写索引相同时等同于 clear 操作 */
             writerIndex = readerIndex = 0;
         }
         return this;
@@ -252,6 +270,9 @@ public abstract class AbstractByteBuf extends ByteBuf {
         return this;
     }
 
+    /**
+     * 重新调节标记索引
+     */
     protected final void adjustMarkers(int decrement) {
         int markedReaderIndex = this.markedReaderIndex;
         if (markedReaderIndex <= decrement) {
@@ -300,6 +321,7 @@ public abstract class AbstractByteBuf extends ByteBuf {
         }
 
         // Adjust to the new capacity.
+        /* 调整空间大小 */
         capacity(newCapacity);
     }
 
@@ -1108,6 +1130,7 @@ public abstract class AbstractByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf writeBytes(ByteBuf src, int srcIndex, int length) {
+        /* 校验和扩展空间 */
         ensureWritable(length);
         setBytes(writerIndex, src, srcIndex, length);
         writerIndex += length;

@@ -41,6 +41,10 @@ public final class UnpooledByteBufAllocator extends AbstractByteBufAllocator imp
      *
      * @param preferDirect {@code true} if {@link #buffer(int)} should try to allocate a direct buffer rather than
      *                     a heap buffer
+     *
+     * one-to-zero:
+     *  三个构造方法中都有 preferDirect 参数，含义仅仅是调用 {@link #buffer(int)} 方法，true:返回直接内存；false:返回堆内存
+     *  别的方法不受影响
      */
     public UnpooledByteBufAllocator(boolean preferDirect) {
         this(preferDirect, false);

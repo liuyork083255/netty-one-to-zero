@@ -25,6 +25,11 @@ import io.netty.util.internal.StringUtil;
 
 /**
  * Skeletal {@link ByteBufAllocator} implementation to extend.
+ *
+ * one-to-zero:
+ *  整个 netty 只提供两种类型的分配器
+ *      池化分配器：{@link PooledByteBufAllocator}
+ *      非池化分配器：{@link UnpooledByteBufAllocator}
  */
 public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
     static final int DEFAULT_INITIAL_CAPACITY = 256;
@@ -247,9 +252,17 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
         return StringUtil.simpleClassName(this) + "(directByDefault: " + directByDefault + ')';
     }
 
+    /**
+     * one-to-zero:
+     *  参数 minNewCapacity 是已经写了的空间 + 即将写入字节数的空间
+     *      比如 byte-buf 初始化大小是10，写了9个字节，那么下一次需要写入15个，那么这个 minNewCapacity = 9 + 15 = 24
+     *  参数 maxCapacity 是这个 byte-buf 的最大容量，如果没有设置默认是 {@link Integer#MAX_VALUE}
+     */
     @Override
     public int calculateNewCapacity(int minNewCapacity, int maxCapacity) {
         checkPositiveOrZero(minNewCapacity, "minNewCapacity");
+
+        /* 扩容不允许超过最大容量 */
         if (minNewCapacity > maxCapacity) {
             throw new IllegalArgumentException(String.format(
                     "minNewCapacity: %d (expected: not greater than maxCapacity(%d)",
@@ -262,6 +275,7 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
         }
 
         // If over threshold, do not double but just increase by threshold.
+        /* 如果超过阈值，不翻倍，每次扩容增加4MB。 */
         if (minNewCapacity > threshold) {
             int newCapacity = minNewCapacity / threshold * threshold;
             if (newCapacity > maxCapacity - threshold) {
@@ -273,6 +287,7 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
         }
 
         // Not over threshold. Double up to 4 MiB, starting from 64.
+        /* 不超过阈值。则每次采用翻倍策略扩展空间，从64开始。 */
         int newCapacity = 64;
         while (newCapacity < minNewCapacity) {
             newCapacity <<= 1;

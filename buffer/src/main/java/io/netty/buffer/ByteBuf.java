@@ -244,6 +244,10 @@ import java.nio.charset.UnsupportedCharsetException;
  *
  * Please refer to {@link ByteBufInputStream} and
  * {@link ByteBufOutputStream}.
+ *
+ * one-to-zero:
+ *  直接实现类 {@link AbstractByteBuf}
+ *
  */
 public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf> {
 
@@ -322,6 +326,8 @@ public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf> {
 
     /**
      * Returns the {@code readerIndex} of this buffer.
+     * one-to-zero:
+     *  获取缓冲区读索引
      */
     public abstract int readerIndex();
 
@@ -332,6 +338,9 @@ public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf> {
      *         if the specified {@code readerIndex} is
      *            less than {@code 0} or
      *            greater than {@code this.writerIndex}
+     *
+     * one-to-zero:
+     *  设置缓冲区读索引
      */
     public abstract ByteBuf readerIndex(int readerIndex);
 
@@ -400,6 +409,10 @@ public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf> {
      *         if the specified {@code writerIndex} is less than the specified
      *         {@code readerIndex} or if the specified {@code writerIndex} is
      *         greater than {@code this.capacity}
+     *
+     * one-to-zero:
+     *  设置读写索引
+     *
      */
     public abstract ByteBuf setIndex(int readerIndex, int writerIndex);
 
@@ -439,6 +452,9 @@ public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf> {
 
     /**
      * Returns {@code true} if and only if this buffer contains equal to or more than the specified number of elements.
+     *
+     * one-to-zero:
+     *  指定的字节数是否可读
      */
     public abstract boolean isReadable(int size);
 
@@ -509,6 +525,13 @@ public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf> {
      * to {@code 0} and {@code oldWriterIndex - oldReaderIndex} respectively.
      * <p>
      * Please refer to the class documentation for more detailed explanation.
+     *
+     * one-to-zero：
+     *  就是将 readerIndex 和 writerIndex 之间的数据全部移到 buffer 头部
+     *
+     *  需要注意的是：
+     *      频繁调用该方法将导致数据的频繁前移，使性能损失。
+     *      由此，提供了另一个方法 {@link #discardSomeReadBytes}，当读索引超过容量的一半时，才会进行数据前移
      */
     public abstract ByteBuf discardReadBytes();
 
@@ -517,6 +540,9 @@ public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf> {
      * some, all, or none of read bytes depending on its internal implementation to reduce
      * overall memory bandwidth consumption at the cost of potentially additional memory
      * consumption.
+     *
+     * one-to-zero:
+     *  当读索引超过容量的一半时，才会进行数据前移
      */
     public abstract ByteBuf discardSomeReadBytes();
 
@@ -686,6 +712,8 @@ public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf> {
      * @throws IndexOutOfBoundsException
      *         if the specified {@code index} is less than {@code 0} or
      *         {@code index + 4} is greater than {@code this.capacity}
+     *
+     *
      */
     public abstract int   getInt(int index);
 
@@ -1220,6 +1248,10 @@ public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf> {
      *            {@code this.capacity}, or
      *         if {@code srcIndex + length} is greater than
      *            {@code src.capacity}
+     *
+     * one-to-zero:
+     *  将 src 中的数据从 srcIndex 开始，长度为 length 的字节，全部移到 src 中从 index 开始位置
+     *
      */
     public abstract ByteBuf setBytes(int index, ByteBuf src, int srcIndex, int length);
 
@@ -2369,6 +2401,10 @@ public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf> {
     /**
      * Returns {@code true} if and only if this buffer has a reference to the low-level memory address that points
      * to the backing data.
+     *
+     * one-to-zero:
+     *  堆内存是没有的，直接内存才有，所以如果对一个 堆buffer 调用这个方法会报错，应进行判断 {@link #memoryAddress()}
+     *  底层直接 ByteBuffer 是否有内存地址
      */
     public abstract boolean hasMemoryAddress();
 
@@ -2377,6 +2413,8 @@ public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf> {
      *
      * @throws UnsupportedOperationException
      *         if this buffer does not support accessing the low-level memory address
+     * one-to-zero:
+     *  直接ByteBuffer的首字节内存地址
      */
     public abstract long memoryAddress();
 

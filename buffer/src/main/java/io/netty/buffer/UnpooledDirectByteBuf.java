@@ -36,11 +36,29 @@ import java.nio.channels.ScatteringByteChannel;
  */
 public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
 
+    /**
+     * 分配器
+     */
     private final ByteBufAllocator alloc;
-
+    /**
+     * 底层 NIO 直接 ByteBuffer
+     */
     private ByteBuffer buffer;
+    /**
+     * 用于 IO 操作的 ByteBuffer
+     * 实现实质是 buffer.duplicate() 即与 buffer 共享底层数据结构
+     */
     private ByteBuffer tmpNioBuf;
+    /**
+     * ByteBuf 的容量
+     */
     private int capacity;
+    /**
+     * 释放标记
+     * 表示是否需要释放 buffer 的底层内存。
+     * true：不释放
+     * false：释放
+     */
     private boolean doNotFree;
 
     /**
@@ -101,6 +119,7 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
      * Allocate a new direct {@link ByteBuffer} with the given initialCapacity.
      */
     protected ByteBuffer allocateDirect(int initialCapacity) {
+        /* 通过 java nio 原生方法创建直接内存 buffer */
         return ByteBuffer.allocateDirect(initialCapacity);
     }
 

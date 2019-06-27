@@ -71,10 +71,21 @@ public final class ByteBufUtil {
     static final ByteBufAllocator DEFAULT_ALLOCATOR;
 
     static {
-        String allocType = SystemPropertyUtil.get(
-                "io.netty.allocator.type", PlatformDependent.isAndroid() ? "unpooled" : "pooled");
+        /**
+         * one-to-zero:
+         *  指定 netty 默认的分配器
+         *  如果用户没有指定参数 io.netty.allocator.type
+         *      则判断当前环境是否时候安卓
+         *          是：unpooled
+         *          否：pooled
+         */
+        String allocType = SystemPropertyUtil.get("io.netty.allocator.type", PlatformDependent.isAndroid() ? "unpooled" : "pooled");
         allocType = allocType.toLowerCase(Locale.US).trim();
 
+        /**
+         * one-to-zero:
+         *  初始化成员变量 {@link DEFAULT_ALLOCATOR}
+         */
         ByteBufAllocator alloc;
         if ("unpooled".equals(allocType)) {
             alloc = UnpooledByteBufAllocator.DEFAULT;
