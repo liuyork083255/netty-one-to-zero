@@ -26,6 +26,10 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.GatheringByteChannel;
 import java.nio.channels.ScatteringByteChannel;
 
+/**
+ * one-to-zero:
+ *  建议使用 {@link PooledByteBufAllocator#DEFAULT} 进行分配
+ */
 class PooledHeapByteBuf extends PooledByteBuf<byte[]> {
 
     private static final Recycler<PooledHeapByteBuf> RECYCLER = new Recycler<PooledHeapByteBuf>() {

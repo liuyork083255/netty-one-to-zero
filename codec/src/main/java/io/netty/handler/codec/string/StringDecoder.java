@@ -50,6 +50,12 @@ import java.util.List;
  *     ch.write("Did you say '" + msg + "'?\n");
  * }
  * </pre>
+ *
+ * one-to-zero:
+ *  将 byte-buf 转为 String 类型的 handler，但是这个 handler 必须和 {@link ByteToMessageDecoder} 子类结合使用，
+ *  类似 {@link LineBasedFrameDecoder} 或者 {@link DelimiterBasedFrameDecoder}
+ *  因为 StringDecoder 完全有可能采用 UTF-8 进行转义，但是发送过来的数据出现半包读问题，可能只有一个字节，从而导致数据出错
+ *
  */
 @Sharable
 public class StringDecoder extends MessageToMessageDecoder<ByteBuf> {
@@ -76,6 +82,7 @@ public class StringDecoder extends MessageToMessageDecoder<ByteBuf> {
 
     @Override
     protected void decode(ChannelHandlerContext ctx, ByteBuf msg, List<Object> out) throws Exception {
+        /* 直接 */
         out.add(msg.toString(charset));
     }
 }

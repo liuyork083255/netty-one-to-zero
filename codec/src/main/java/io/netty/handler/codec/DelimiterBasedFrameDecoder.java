@@ -56,6 +56,12 @@ import java.util.List;
  * | ABC\nDEF |
  * +----------+
  * </pre>
+ *
+ * one-to-zero:
+ *  特定分隔符解码器，比 {@link LineBasedFrameDecoder} 更加灵活，因为后者只能分割 \n 和 \r\n 两种分隔符
+ *  DelimiterBasedFrameDecoder 还支持多个分隔符
+ *
+ *
  */
 public class DelimiterBasedFrameDecoder extends ByteToMessageDecoder {
 
@@ -90,8 +96,7 @@ public class DelimiterBasedFrameDecoder extends ByteToMessageDecoder {
      *                        delimiter or not
      * @param delimiter  the delimiter
      */
-    public DelimiterBasedFrameDecoder(
-            int maxFrameLength, boolean stripDelimiter, ByteBuf delimiter) {
+    public DelimiterBasedFrameDecoder(int maxFrameLength, boolean stripDelimiter, ByteBuf delimiter) {
         this(maxFrameLength, stripDelimiter, true, delimiter);
     }
 
@@ -112,11 +117,8 @@ public class DelimiterBasedFrameDecoder extends ByteToMessageDecoder {
      *                  <tt>maxFrameLength</tt> has been read.
      * @param delimiter  the delimiter
      */
-    public DelimiterBasedFrameDecoder(
-            int maxFrameLength, boolean stripDelimiter, boolean failFast,
-            ByteBuf delimiter) {
-        this(maxFrameLength, stripDelimiter, failFast, new ByteBuf[] {
-                delimiter.slice(delimiter.readerIndex(), delimiter.readableBytes())});
+    public DelimiterBasedFrameDecoder(int maxFrameLength, boolean stripDelimiter, boolean failFast, ByteBuf delimiter) {
+        this(maxFrameLength, stripDelimiter, failFast, new ByteBuf[] {delimiter.slice(delimiter.readerIndex(), delimiter.readableBytes())});
     }
 
     /**
@@ -141,8 +143,7 @@ public class DelimiterBasedFrameDecoder extends ByteToMessageDecoder {
      *                        delimiter or not
      * @param delimiters  the delimiters
      */
-    public DelimiterBasedFrameDecoder(
-            int maxFrameLength, boolean stripDelimiter, ByteBuf... delimiters) {
+    public DelimiterBasedFrameDecoder(int maxFrameLength, boolean stripDelimiter, ByteBuf... delimiters) {
         this(maxFrameLength, stripDelimiter, true, delimiters);
     }
 
@@ -163,8 +164,7 @@ public class DelimiterBasedFrameDecoder extends ByteToMessageDecoder {
      *                  <tt>maxFrameLength</tt> has been read.
      * @param delimiters  the delimiters
      */
-    public DelimiterBasedFrameDecoder(
-            int maxFrameLength, boolean stripDelimiter, boolean failFast, ByteBuf... delimiters) {
+    public DelimiterBasedFrameDecoder(int maxFrameLength, boolean stripDelimiter, boolean failFast, ByteBuf... delimiters) {
         validateMaxFrameLength(maxFrameLength);
         if (delimiters == null) {
             throw new NullPointerException("delimiters");
@@ -172,7 +172,7 @@ public class DelimiterBasedFrameDecoder extends ByteToMessageDecoder {
         if (delimiters.length == 0) {
             throw new IllegalArgumentException("empty delimiters");
         }
-
+        /** 如果分隔符是 换行符，则直接借用 {@link LineBasedFrameDecoder} 类来实现，而不用重新写一套逻辑了 */
         if (isLineBased(delimiters) && !isSubclass()) {
             lineBasedDecoder = new LineBasedFrameDecoder(maxFrameLength, stripDelimiter, failFast);
             this.delimiters = null;
