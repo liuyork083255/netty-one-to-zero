@@ -49,6 +49,7 @@ public class LineBasedFrameDecoder extends ByteToMessageDecoder {
      * Whether or not to throw an exception as soon as we exceed maxLength.
      *  true: 如果超过了 maxLength 立马抛出异常
      *  false:如果超过了 maxLength 不立马抛出，而是继续解码当前的 buf，然后再抛出异常
+     *  默认 false
      */
     private final boolean failFast;
 
