@@ -42,10 +42,19 @@ import io.netty.util.internal.TypeParameterMatcher;
  *         }
  *     }
  * </pre>
+ *
+ * one-to-zero:
+ *  将 I 类型的 message 转为 ByteBuf 类型
  */
 public abstract class MessageToByteEncoder<I> extends ChannelOutboundHandlerAdapter {
 
     private final TypeParameterMatcher matcher;
+
+    /**
+     * 将 msg 转为的 ByteBuf 是否采用直接内存缓冲区
+     * true：使用直接缓冲区 buf
+     * false：使用堆内存缓冲区 buf
+     */
     private final boolean preferDirect;
 
     /**
@@ -102,10 +111,14 @@ public abstract class MessageToByteEncoder<I> extends ChannelOutboundHandlerAdap
             if (acceptOutboundMessage(msg)) {
                 @SuppressWarnings("unchecked")
                 I cast = (I) msg;
+
+                /* 分配一个 ByteBuf，用于容纳解码后字节 */
                 buf = allocateBuffer(ctx, cast, preferDirect);
+
                 try {
                     encode(ctx, cast, buf);
                 } finally {
+                    /* 引用计数减 1 */
                     ReferenceCountUtil.release(cast);
                 }
 
@@ -113,6 +126,7 @@ public abstract class MessageToByteEncoder<I> extends ChannelOutboundHandlerAdap
                     ctx.write(buf, promise);
                 } else {
                     buf.release();
+                    /* 写入一个空 buf */
                     ctx.write(Unpooled.EMPTY_BUFFER, promise);
                 }
                 buf = null;
@@ -133,10 +147,13 @@ public abstract class MessageToByteEncoder<I> extends ChannelOutboundHandlerAdap
     /**
      * Allocate a {@link ByteBuf} which will be used as argument of {@link #encode(ChannelHandlerContext, I, ByteBuf)}.
      * Sub-classes may override this method to return {@link ByteBuf} with a perfect matching {@code initialCapacity}.
+     *
+     * one-to-zero:
+     *  这里建议用户自己继承这个方法，原因是只有用户才知道当前的 msg 应该分配 buf 的初始化空间大小
      */
-    protected ByteBuf allocateBuffer(ChannelHandlerContext ctx, @SuppressWarnings("unused") I msg,
-                               boolean preferDirect) throws Exception {
+    protected ByteBuf allocateBuffer(ChannelHandlerContext ctx, @SuppressWarnings("unused") I msg, boolean preferDirect) throws Exception {
         if (preferDirect) {
+            /* 分配一个直接内存 buf */
             return ctx.alloc().ioBuffer();
         } else {
             return ctx.alloc().heapBuffer();

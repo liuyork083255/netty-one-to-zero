@@ -64,6 +64,11 @@ public interface ReferenceCounted {
      * {@code 0}.
      *
      * @return {@code true} if and only if the reference count became {@code 0} and this object has been deallocated
+     *
+     * one-to-zero:
+     *  减少 buf 的引用计数 1，如果引用计数变为了 0，在释放该对象
+     *  返回值：当且仅当引用计数为0，以及对象被释放回收返回 true，否则返回 false
+     *
      */
     boolean release();
 

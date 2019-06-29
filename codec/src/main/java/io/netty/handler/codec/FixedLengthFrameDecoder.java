@@ -37,6 +37,10 @@ import java.util.List;
  * | ABC | DEF | GHI |
  * +-----+-----+-----+
  * </pre>
+ *
+ * one-to-zero:
+ *  逻辑十分简单，就是判断可读的字节数达到了阈值，则进行分割
+ *  这解码器用的十分少
  */
 public class FixedLengthFrameDecoder extends ByteToMessageDecoder {
 
@@ -68,8 +72,8 @@ public class FixedLengthFrameDecoder extends ByteToMessageDecoder {
      * @return  frame           the {@link ByteBuf} which represent the frame or {@code null} if no frame could
      *                          be created.
      */
-    protected Object decode(
-            @SuppressWarnings("UnusedParameters") ChannelHandlerContext ctx, ByteBuf in) throws Exception {
+    protected Object decode(@SuppressWarnings("UnusedParameters") ChannelHandlerContext ctx, ByteBuf in) throws Exception {
+        /* 长度达到了就直接分割 */
         if (in.readableBytes() < frameLength) {
             return null;
         } else {

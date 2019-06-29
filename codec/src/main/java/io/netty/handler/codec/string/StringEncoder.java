@@ -47,6 +47,11 @@ import java.util.List;
  *     ch.write("Did you say '" + msg + "'?\n");
  * }
  * </pre>
+ *
+ * one-to-zero:
+ *  这个编码器是将 String 转为 ByteBuf，如果程序中写入的数字符串，那么可以直接使用这个编码器
+ *  如果程序是写入的是一个 POJO，那么可以考虑 {@link io.netty.handler.codec.MessageToByteEncoder}
+ *
  */
 @Sharable
 public class StringEncoder extends MessageToMessageEncoder<CharSequence> {

@@ -48,6 +48,11 @@ import java.util.List;
  * Be aware that you need to call {@link ReferenceCounted#retain()} on messages that are just passed through if they
  * are of type {@link ReferenceCounted}. This is needed as the {@link MessageToMessageEncoder} will call
  * {@link ReferenceCounted#release()} on encoded messages.
+ *
+ * one-to-zero:
+ *  将 I 类型 msg 转为 Object 类型
+ *  同样需要注意：如果 I 是 ByteBuf 类型，且这个类型需要传递给下一个 handler，那么引用计数记得加 1
+ *  感觉用的比较少，一般程序中为了性能提升，肯定会较少序列化次数，所以一般都是用的 {@link MessageToByteEncoder} 编码器
  */
 public abstract class MessageToMessageEncoder<I> extends ChannelOutboundHandlerAdapter {
 

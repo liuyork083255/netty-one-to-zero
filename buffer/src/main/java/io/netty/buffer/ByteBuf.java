@@ -2495,6 +2495,10 @@ public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf> {
     /**
      * Used internally by {@link AbstractByteBuf#ensureAccessible()} to try to guard
      * against using the buffer after it was released (best-effort).
+     *
+     * one-to-zero:
+     *  默认实现是简单判断引用计数是否等于 0，防止等于 0 后还在使用
+     *  不同的子类都有自己的实现，判断规则含义是一致的
      */
     boolean isAccessible() {
         return refCnt() != 0;

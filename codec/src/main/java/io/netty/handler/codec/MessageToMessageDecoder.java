@@ -48,9 +48,20 @@ import java.util.List;
  * are of type {@link ReferenceCounted}. This is needed as the {@link MessageToMessageDecoder} will call
  * {@link ReferenceCounted#release()} on decoded messages.
  *
+ * one-to-zero:
+ *  MessageToMessageDecoder<I> 就是针对 I 类型的 msg 转为 Object 类型
+ *  如果 I 类型是 ByteBuf，那么就等同于 {@link ByteToMessageDecoder}
+ *  其用处就是将 message 转为 message，如果第一个 message 是 ByteBuf 类型，那么也没有必要使用这个解码器，直接使用 ByteToMessageDecoder 即可
+ *  Note：
+ *      需要注意的是如果 I 类型是 {@link ReferenceCounted} 子类，那么需要调用 {@link ReferenceCounted#retain()}，因为这解码器默认
+ *      会调用 {@link ReferenceCounted#release()}
+ *      当然：如果这 {@link ReferenceCounted} 类型的 msg，只是在当前的 handler 存在，也就是不会传递给下一个 handler，那么也可以不用调用 retain 方法
  */
 public abstract class MessageToMessageDecoder<I> extends ChannelInboundHandlerAdapter {
 
+    /**
+     * 泛型匹配规则器
+     */
     private final TypeParameterMatcher matcher;
 
     /**
@@ -87,6 +98,9 @@ public abstract class MessageToMessageDecoder<I> extends ChannelInboundHandlerAd
                 try {
                     decode(ctx, cast, out);
                 } finally {
+                    /**
+                     * 如果 I 是 {@link ReferenceCounted} 类型，需要调用 {@link ReferenceCounted#retain()}，因为这里会减少一次引用
+                     * */
                     ReferenceCountUtil.release(cast);
                 }
             } else {

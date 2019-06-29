@@ -82,7 +82,7 @@ public class StringDecoder extends MessageToMessageDecoder<ByteBuf> {
 
     @Override
     protected void decode(ChannelHandlerContext ctx, ByteBuf msg, List<Object> out) throws Exception {
-        /* 直接 */
+        /* 直接按照指定的字符集解码 */
         out.add(msg.toString(charset));
     }
 }
