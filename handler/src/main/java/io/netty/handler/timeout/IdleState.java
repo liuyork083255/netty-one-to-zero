@@ -24,14 +24,17 @@ import io.netty.channel.Channel;
 public enum IdleState {
     /**
      * No data was received for a while.
+     * 一段时间内没有收到读操作
      */
     READER_IDLE,
     /**
      * No data was sent for a while.
+     * 一段时间内没有收到操作
      */
     WRITER_IDLE,
     /**
      * No data was either received or sent for a while.
+     * 一段时间读写操作都没有发生
      */
     ALL_IDLE
 }

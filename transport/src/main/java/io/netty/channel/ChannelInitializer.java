@@ -86,6 +86,8 @@ public abstract class ChannelInitializer<C extends Channel> extends ChannelInbou
      * @throws Exception    is thrown if an error occurs. In that case it will be handled by
      *                      {@link #exceptionCaught(ChannelHandlerContext, Throwable)} which will by default close
      *                      the {@link Channel}.
+     * one-to-zero:
+     *  initChannel 方法被回调是在 {@link DefaultChannelPipeline#pendingHandlerCallbackHead} 完成
      */
     protected abstract void initChannel(C ch) throws Exception;
 
@@ -128,9 +130,21 @@ public abstract class ChannelInitializer<C extends Channel> extends ChannelInbou
             // The good thing about calling initChannel(...) in handlerAdded(...) is that there will be no ordering
             // surprises if a ChannelInitializer will add another ChannelInitializer. This is as all handlers
             // will be added in the expected order.
+            /**
+             * 这个方法则是真正开始调用 {@link #initChannel(Channel)} 方法，
+             * 也就是添加真正用户的 handler 代码
+             * 常见就是
+             * public void initChannel(SocketChannel ch) throws Exception {
+             *      ChannelPipeline p = ch.pipeline();
+             *      p.addLast(new StringDecoder());
+             *      p.addLast(new StringEncoder());
+             *      p.addLast(new MyHandler());
+             *  }
+             */
             if (initChannel(ctx)) {
 
                 // We are done with init the Channel, removing the initializer now.
+                /* 初始化 channel 的 handler 已经完成了自己的任务，所以将之移除 pipeline */
                 removeState(ctx);
             }
         }

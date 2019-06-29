@@ -91,6 +91,12 @@ public class DefaultChannelPipeline implements ChannelPipeline {
      * We only keep the head because it is expected that the list is used infrequently and its size is small.
      * Thus full iterations to do insertions is assumed to be a good compromised to saving memory and tail management
      * complexity.
+     *
+     * oen-to-zero:
+     *  这个任务其实就是调用
+     *      handlerAdd  {@link PendingHandlerAddedTask}
+     *      或者是
+     *      handlerRemove {@link PendingHandlerRemovedTask}
      */
     private PendingHandlerCallback pendingHandlerCallbackHead;
 
@@ -645,6 +651,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         }
     }
 
+    /**
+     * 这个方法就是真正调用 pipeline 中的 handler 的 handlerAdded 方法
+     */
     private void callHandlerAdded0(final AbstractChannelHandlerContext ctx) {
         try {
             /**

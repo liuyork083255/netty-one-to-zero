@@ -25,6 +25,9 @@ import java.net.SocketAddress;
  *
  * It is a good starting point if your {@link ChannelHandler} implementation needs to intercept operations and also
  * state updates.
+ *
+ * one-to-zero:
+ *  实现了出栈和入栈的通道，默认所有的操作都采用注解 @Skip 跳过
  */
 public class ChannelDuplexHandler extends ChannelInboundHandlerAdapter implements ChannelOutboundHandler {
 

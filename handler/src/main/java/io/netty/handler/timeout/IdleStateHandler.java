@@ -96,6 +96,8 @@ import java.util.concurrent.TimeUnit;
  * @see WriteTimeoutHandler
  */
 public class IdleStateHandler extends ChannelDuplexHandler {
+
+    /** 将一毫秒转为纳秒 1ms = 1000000 ns */
     private static final long MIN_TIMEOUT_NANOS = TimeUnit.MILLISECONDS.toNanos(1);
 
     // Not create a new ChannelFutureListener per write operation to reduce GC pressure.
@@ -107,9 +109,13 @@ public class IdleStateHandler extends ChannelDuplexHandler {
         }
     };
 
+    /** 是否考虑出站时较慢的情况。默认值是false（不考虑）。 */
     private final boolean observeOutput;
+    /** 读事件空闲时间，0 则禁用事件 */
     private final long readerIdleTimeNanos;
+    /** 写事件空闲时间，0 则禁用事件 */
     private final long writerIdleTimeNanos;
+    /** 读或写空闲时间，0 则禁用事件 */
     private final long allIdleTimeNanos;
 
     private ScheduledFuture<?> readerIdleTimeout;
@@ -196,6 +202,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
 
         this.observeOutput = observeOutput;
 
+        /* 设置时间单位，可以看出，默认最小的单位就是 1 毫秒，不能比一毫秒还小的心跳时间了 */
         if (readerIdleTime <= 0) {
             readerIdleTimeNanos = 0;
         } else {

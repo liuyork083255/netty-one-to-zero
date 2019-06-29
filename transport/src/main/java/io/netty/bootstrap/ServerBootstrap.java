@@ -317,7 +317,7 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
         /* worker 的 child group */
         private final EventLoopGroup childGroup;
-        /* worker 的 child handler */
+        /* worker 的 child handler，这个类其实就是对应 worker 的 ChannelInitializer */
         private final ChannelHandler childHandler;
         /* worker 的 child option */
         private final Entry<ChannelOption<?>, Object>[] childOptions;
@@ -356,6 +356,9 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
              */
             final Channel child = (Channel) msg;
 
+            /**
+             * 先将 {@link ChannelInitializer} 添加到 pipeline 中，注册完成之后，会调用 ChannelInitializer 的 handlerAdded 方法
+             */
             child.pipeline().addLast(childHandler);
 
             setChannelOptions(child, childOptions, logger);
