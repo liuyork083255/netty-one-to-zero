@@ -327,16 +327,13 @@ public class IdleStateHandler extends ChannelDuplexHandler {
 
         lastReadTime = lastWriteTime = ticksInNanos();
         if (readerIdleTimeNanos > 0) {
-            readerIdleTimeout = schedule(ctx, new ReaderIdleTimeoutTask(ctx),
-                    readerIdleTimeNanos, TimeUnit.NANOSECONDS);
+            readerIdleTimeout = schedule(ctx, new ReaderIdleTimeoutTask(ctx), readerIdleTimeNanos, TimeUnit.NANOSECONDS);
         }
         if (writerIdleTimeNanos > 0) {
-            writerIdleTimeout = schedule(ctx, new WriterIdleTimeoutTask(ctx),
-                    writerIdleTimeNanos, TimeUnit.NANOSECONDS);
+            writerIdleTimeout = schedule(ctx, new WriterIdleTimeoutTask(ctx), writerIdleTimeNanos, TimeUnit.NANOSECONDS);
         }
         if (allIdleTimeNanos > 0) {
-            allIdleTimeout = schedule(ctx, new AllIdleTimeoutTask(ctx),
-                    allIdleTimeNanos, TimeUnit.NANOSECONDS);
+            allIdleTimeout = schedule(ctx, new AllIdleTimeoutTask(ctx), allIdleTimeNanos, TimeUnit.NANOSECONDS);
         }
     }
 
