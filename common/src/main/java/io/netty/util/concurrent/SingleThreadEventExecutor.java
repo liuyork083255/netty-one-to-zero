@@ -56,11 +56,9 @@ import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
  */
 public abstract class SingleThreadEventExecutor extends AbstractScheduledEventExecutor implements OrderedEventExecutor {
 
-    static final int DEFAULT_MAX_PENDING_EXECUTOR_TASKS = Math.max(16,
-            SystemPropertyUtil.getInt("io.netty.eventexecutor.maxPendingTasks", Integer.MAX_VALUE));
+    static final int DEFAULT_MAX_PENDING_EXECUTOR_TASKS = Math.max(16, SystemPropertyUtil.getInt("io.netty.eventexecutor.maxPendingTasks", Integer.MAX_VALUE));
 
-    private static final InternalLogger logger =
-            InternalLoggerFactory.getInstance(SingleThreadEventExecutor.class);
+    private static final InternalLogger logger = InternalLoggerFactory.getInstance(SingleThreadEventExecutor.class);
 
     private static final int ST_NOT_STARTED = 1;
     private static final int ST_STARTED = 2;
@@ -89,10 +87,16 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     private final Queue<Runnable> taskQueue;
 
+    /**
+     * IO 线程本体
+     */
     private volatile Thread thread;
     @SuppressWarnings("unused")
     private volatile ThreadProperties threadProperties;
     private final Executor executor;
+    /**
+     * 标记IO 线程是否被标记为中断
+     */
     private volatile boolean interrupted;
 
     private final Semaphore threadLock = new Semaphore(0);
@@ -101,8 +105,15 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     private final int maxPendingTasks;
     private final RejectedExecutionHandler rejectedExecutionHandler;
 
+    /**
+     * 记录这个 IO 线程执行任务的最后时间，每一次执行任务都会更新一次
+     * 采用 System.nanoTime() - 程序启动时间纳秒
+     */
     private long lastExecutionTime;
 
+    /**
+     * 记录当前 IO 线程的状态
+     */
     @SuppressWarnings({ "FieldMayBeFinal", "unused" })
     private volatile int state = ST_NOT_STARTED;
 
@@ -516,15 +527,21 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
      */
     @UnstableApi
     protected void afterRunningAllTasks() { }
+
     /**
      * Returns the amount of time left until the scheduled task with the closest dead line is executed.
      */
     protected long delayNanos(long currentTimeNanos) {
+        /**
+         * 获取定时任务队列 {@link AbstractScheduledEventExecutor#scheduledTaskQueue} 中第一个元素
+         */
         ScheduledFutureTask<?> scheduledTask = peekScheduledTask();
         if (scheduledTask == null) {
+            /* 如果没有定时任务，则默认返回1秒，表示下一次任务1秒(当然：其实是一种策略，而已，并没有任务) */
             return SCHEDULE_PURGE_INTERVAL;
         }
 
+        /* 获取任务的下一次执行时间 */
         return scheduledTask.delayNanos(currentTimeNanos);
     }
 
@@ -837,8 +854,12 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
             throw new NullPointerException("task");
         }
 
+        /* 判断当前执行操作的线程是不是IO线程 */
         boolean inEventLoop = inEventLoop();
+
+        /* 添加任务 task 到 queue 中 */
         addTask(task);
+
         if (!inEventLoop) {
             startThread();
             if (isShutdown()) {
@@ -943,8 +964,12 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     private static final long SCHEDULE_PURGE_INTERVAL = TimeUnit.SECONDS.toNanos(1);
 
+    /**
+     * 如果线程未启动线程则启动线程
+     */
     private void startThread() {
         if (state == ST_NOT_STARTED) {
+            /* 标记状态为已启动 */
             if (STATE_UPDATER.compareAndSet(this, ST_NOT_STARTED, ST_STARTED)) {
                 try {
                     doStartThread();
@@ -974,19 +999,34 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         return false;
     }
 
+    /**
+     * 启动线程
+     */
     private void doStartThread() {
         assert thread == null;
+        /* 直接让线程执行 */
         executor.execute(new Runnable() {
             @Override
             public void run() {
+                /*
+                 * executor 里面已经初始化了线程，这里的 Thread.currentThread() 其实就是 executor 里面的一个线程
+                 * 在启动的时候用户会初始化 boss 和 worker 线程，这里就是在里面获取一个线程然后赋值给 IO 线程引用
+                 */
                 thread = Thread.currentThread();
+
+                /* 是否被标记中断 */
                 if (interrupted) {
                     thread.interrupt();
                 }
 
                 boolean success = false;
+                /* 更新当前 IO 线程执行任务的最后时间 */
                 updateLastExecutionTime();
+
                 try {
+                    /**
+                     * 真正执行 IO 线程轮询逻辑，也就是 NioEventLoop#run()
+                     */
                     SingleThreadEventExecutor.this.run();
                     success = true;
                 } catch (Throwable t) {
@@ -994,8 +1034,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                 } finally {
                     for (;;) {
                         int oldState = state;
-                        if (oldState >= ST_SHUTTING_DOWN || STATE_UPDATER.compareAndSet(
-                                SingleThreadEventExecutor.this, oldState, ST_SHUTTING_DOWN)) {
+                        if (oldState >= ST_SHUTTING_DOWN || STATE_UPDATER.compareAndSet(SingleThreadEventExecutor.this, oldState, ST_SHUTTING_DOWN)) {
                             break;
                         }
                     }
@@ -1003,9 +1042,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                     // Check if confirmShutdown() was called at the end of the loop.
                     if (success && gracefulShutdownStartTime == 0) {
                         if (logger.isErrorEnabled()) {
-                            logger.error("Buggy " + EventExecutor.class.getSimpleName() + " implementation; " +
-                                    SingleThreadEventExecutor.class.getSimpleName() + ".confirmShutdown() must " +
-                                    "be called before run() implementation terminates.");
+                            logger.error("Buggy " + EventExecutor.class.getSimpleName() + " implementation; " + SingleThreadEventExecutor.class.getSimpleName() + ".confirmShutdown() must " + "be called before run() implementation terminates.");
                         }
                     }
 
@@ -1030,8 +1067,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                             threadLock.release();
                             if (!taskQueue.isEmpty()) {
                                 if (logger.isWarnEnabled()) {
-                                    logger.warn("An event executor terminated with " +
-                                            "non-empty task queue (" + taskQueue.size() + ')');
+                                    logger.warn("An event executor terminated with " + "non-empty task queue (" + taskQueue.size() + ')');
                                 }
                             }
                             terminationFuture.setSuccess(null);

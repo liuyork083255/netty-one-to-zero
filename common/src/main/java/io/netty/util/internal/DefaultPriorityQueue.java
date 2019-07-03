@@ -27,12 +27,24 @@ import static io.netty.util.internal.PriorityQueueNode.INDEX_NOT_IN_QUEUE;
  * A priority queue which uses natural ordering of elements. Elements are also required to be of type
  * {@link PriorityQueueNode} for the purpose of maintaining the index in the priority queue.
  * @param <T> The object that is maintained in the queue.
+ * @author
+ *
+ * ont-to-zero:
+ *  netty 中定时任务的存储结构体，也就是定时任务其实是存储在队列 queue 中的，这个 queue 是一个延迟队列，netty 做了封装
+ *  1 虽是队列结构，底层的存储结构是基于数组
+ *  2 每一个队列中的元素必须有一个 可比较 的方法，因为在出栈和入栈都是需要计算优先级
+ *  3 每一次入栈 {@link #offer} 都要计算优先级，将最小元素放在数组第一个位置
+ *  4 每一次出栈 {@link #poll} 都要计算优先级，获取最小元素，然后调整数组结构，将第二小元素移至数组第一个位置
+ *
  */
-public final class DefaultPriorityQueue<T extends PriorityQueueNode> extends AbstractQueue<T>
-                                                                     implements PriorityQueue<T> {
+public final class DefaultPriorityQueue<T extends PriorityQueueNode> extends AbstractQueue<T> implements PriorityQueue<T> {
+
     private static final PriorityQueueNode[] EMPTY_ARRAY = new PriorityQueueNode[0];
     private final Comparator<T> comparator;
     private T[] queue;
+    /**
+     * 记录队列中元素个数
+     */
     private int size;
 
     @SuppressWarnings("unchecked")
@@ -82,26 +94,32 @@ public final class DefaultPriorityQueue<T extends PriorityQueueNode> extends Abs
         size = 0;
     }
 
+    /**
+     * one-to-zero:
+     *  添加元素
+     */
     @Override
     public boolean offer(T e) {
         if (e.priorityQueueIndex(this) != INDEX_NOT_IN_QUEUE) {
-            throw new IllegalArgumentException("e.priorityQueueIndex(): " + e.priorityQueueIndex(this) +
-                    " (expected: " + INDEX_NOT_IN_QUEUE + ") + e: " + e);
+            throw new IllegalArgumentException("e.priorityQueueIndex(): " + e.priorityQueueIndex(this) + " (expected: " + INDEX_NOT_IN_QUEUE + ") + e: " + e);
         }
 
         // Check that the array capacity is enough to hold values by doubling capacity.
+        /* 扩容检测，因为底层是数组存储结构 */
         if (size >= queue.length) {
             // Use a policy which allows for a 0 initial capacity. Same policy as JDK's priority queue, double when
             // "small", then grow by 50% when "large".
-            queue = Arrays.copyOf(queue, queue.length + ((queue.length < 64) ?
-                                                         (queue.length + 2) :
-                                                         (queue.length >>> 1)));
+            queue = Arrays.copyOf(queue, queue.length + ((queue.length < 64) ? (queue.length + 2) : (queue.length >>> 1)));
         }
 
         bubbleUp(size++, e);
         return true;
     }
 
+    /**
+     * one-to-zero:
+     *  获取堆中最小元素
+     */
     @Override
     public T poll() {
         if (size == 0) {
@@ -239,6 +257,10 @@ public final class DefaultPriorityQueue<T extends PriorityQueueNode> extends Abs
         return i >= 0 && i < size && node.equals(queue[i]);
     }
 
+    /**
+     * 在弹出一个最小元素后，堆中的数据结构肯定会发生变化，
+     * 下面的逻辑就是保证最小元素弹出后，第二小元素占据第一个位置
+     */
     private void bubbleDown(int k, T node) {
         final int half = size >>> 1;
         while (k < half) {
@@ -270,6 +292,9 @@ public final class DefaultPriorityQueue<T extends PriorityQueueNode> extends Abs
         node.priorityQueueIndex(this, k);
     }
 
+    /**
+     * 下面应该是一个机遇数组实现的最小堆算法，也就是存储在数组中的数据结构符合最小堆，不一定是递增或者递减，但是第一个值肯定是逻辑最小值
+     */
     private void bubbleUp(int k, T node) {
         while (k > 0) {
             int iParent = (k - 1) >>> 1;

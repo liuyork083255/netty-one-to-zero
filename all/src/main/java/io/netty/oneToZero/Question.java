@@ -16,5 +16,12 @@ package io.netty.oneToZero;
  * netty 的内存分配管理和对象池关系
  */
 
+/**
+ *  netty要执行的任务task其实有三个
+ *   1 定时任务队列（scheduledTaskQueue） {@link io.netty.util.concurrent.AbstractScheduledEventExecutor#scheduledTaskQueue}
+ *   2 常规任务队列（taskQueue） {@link io.netty.util.concurrent.SingleThreadEventExecutor#taskQueue}
+ *   3 后置队列（tailTasks）  {@link io.netty.channel.SingleThreadEventLoop#tailTasks}
+ * */
+
 public class Question {
 }

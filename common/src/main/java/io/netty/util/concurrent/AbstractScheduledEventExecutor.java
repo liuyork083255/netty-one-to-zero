@@ -18,6 +18,7 @@ package io.netty.util.concurrent;
 import io.netty.util.internal.DefaultPriorityQueue;
 import io.netty.util.internal.ObjectUtil;
 import io.netty.util.internal.PriorityQueue;
+import io.netty.util.internal.PriorityQueueNode;
 
 import java.util.Comparator;
 import java.util.Queue;
@@ -133,6 +134,10 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
         return Math.max(0, scheduledTask.deadlineNanos() - nanoTime());
     }
 
+    /**
+     * one-to-zero:
+     *  获取定时任务队列中第一个元素，该元素可能到期，也可能没有到期
+     */
     final ScheduledFutureTask<?> peekScheduledTask() {
         Queue<ScheduledFutureTask<?>> scheduledTaskQueue = this.scheduledTaskQueue;
         if (scheduledTaskQueue == null) {
@@ -163,6 +168,11 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
                 this, command, null, ScheduledFutureTask.deadlineNanos(unit.toNanos(delay))));
     }
 
+    /**
+     * @param callable  定时任务
+     * @param delay 定时延迟时间，比如心跳一般 10s
+     * @param unit  时间单位
+     */
     @Override
     public <V> ScheduledFuture<V> schedule(Callable<V> callable, long delay, TimeUnit unit) {
         ObjectUtil.checkNotNull(callable, "callable");
@@ -173,7 +183,11 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
         /* 是一个空校验 */
         validateScheduled0(delay, unit);
 
-        /* 创建任务，添加至任务 queue 中 */
+        /*
+         * 创建任务，添加至任务 queue 中
+         * 注意：这的 ScheduledFutureTask.deadlineNanos(unit.toNanos(delay)) 操作目的是计算这个任务下次执行的时间
+         *      如果时间周期是10s，那么这里处理过后的值是：当前时间纳秒 + 10s(纳秒)
+         */
         return schedule(new ScheduledFutureTask<V>(this, callable, ScheduledFutureTask.deadlineNanos(unit.toNanos(delay))));
     }
 
@@ -235,7 +249,10 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
 
     <V> ScheduledFuture<V> schedule(final ScheduledFutureTask<V> task) {
         if (inEventLoop()) {
-            /* 将任务添加至任务队列中 */
+            /**
+             * 将任务添加至任务队列中
+             * 这里其实会调用 {@link java.util.AbstractQueue#add}，然后在里面调用实现的子类 {@link DefaultPriorityQueue#offer}
+             */
             scheduledTaskQueue().add(task);
         } else {
             execute(new Runnable() {
