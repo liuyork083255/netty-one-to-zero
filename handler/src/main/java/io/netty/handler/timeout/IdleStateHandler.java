@@ -26,6 +26,7 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOutboundBuffer;
 import io.netty.channel.ChannelPromise;
 
+import java.util.concurrent.Callable;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -94,6 +95,13 @@ import java.util.concurrent.TimeUnit;
  *
  * @see ReadTimeoutHandler
  * @see WriteTimeoutHandler
+ *
+ * one-to-zero:
+ *  注意： netty 的心跳机制不是使用 {@link io.netty.util.HashedWheelTimer} 实现的
+ *      而是将任务全部添加到任务队列中 {@link io.netty.util.concurrent.AbstractScheduledEventExecutor#scheduledTaskQueue}
+ *
+ *  netty 专门设置了两个读写 handler，效果是一样的，只不过更加明细化而已
+ *
  */
 public class IdleStateHandler extends ChannelDuplexHandler {
 
@@ -102,9 +110,12 @@ public class IdleStateHandler extends ChannelDuplexHandler {
 
     // Not create a new ChannelFutureListener per write operation to reduce GC pressure.
     private final ChannelFutureListener writeListener = new ChannelFutureListener() {
+        /** 在数据真正被 flush 到 tcp 缓冲区后，则会回调这个方法 */
         @Override
         public void operationComplete(ChannelFuture future) throws Exception {
+            /* 记录完成写的最后系统时间 */
             lastWriteTime = ticksInNanos();
+            /* 设置写状态 */
             firstWriterIdleEvent = firstAllIdleEvent = true;
         }
     };
@@ -118,18 +129,34 @@ public class IdleStateHandler extends ChannelDuplexHandler {
     /** 读或写空闲时间，0 则禁用事件 */
     private final long allIdleTimeNanos;
 
+    /** 读空闲定时任务的返回句柄 future */
     private ScheduledFuture<?> readerIdleTimeout;
+    /** 最后一次读时间 */
     private long lastReadTime;
+    /** 是否第一次读超时 */
     private boolean firstReaderIdleEvent = true;
 
+    /** 写空闲定时任务的返回句柄 future */
     private ScheduledFuture<?> writerIdleTimeout;
+    /** 最后一次写超时 */
     private long lastWriteTime;
+    /** 是否第一次写超时 */
     private boolean firstWriterIdleEvent = true;
 
+    /** 读或写超时定时任务的返回句柄 future */
     private ScheduledFuture<?> allIdleTimeout;
+    /** 是否读或写超时 */
     private boolean firstAllIdleEvent = true;
 
+    /** 处理器状态: 0-无状态, 1-初始化, 2-销毁 */
     private byte state; // 0 - none, 1 - initialized, 2 - destroyed
+
+    /**
+     * one-to-zero:
+     *  读状态标志
+     *  如果正在读取数据 {@link #channelRead(ChannelHandlerContext, Object)} 则为 true
+     *  如果读取数据完成 {@link #channelReadComplete(ChannelHandlerContext)} 则为 false
+     */
     private boolean reading;
 
     private long lastChangeCheckTimeStamp;
@@ -193,9 +220,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
      *        the {@link TimeUnit} of {@code readerIdleTime},
      *        {@code writeIdleTime}, and {@code allIdleTime}
      */
-    public IdleStateHandler(boolean observeOutput,
-            long readerIdleTime, long writerIdleTime, long allIdleTime,
-            TimeUnit unit) {
+    public IdleStateHandler(boolean observeOutput, long readerIdleTime, long writerIdleTime, long allIdleTime, TimeUnit unit) {
         if (unit == null) {
             throw new NullPointerException("unit");
         }
@@ -244,6 +269,11 @@ public class IdleStateHandler extends ChannelDuplexHandler {
         return TimeUnit.NANOSECONDS.toMillis(allIdleTimeNanos);
     }
 
+    /**
+     * one-to-zero:
+     *  当处理器被添加时,如果 channel 是注册并且是 active 状态，则初始化
+     *  否则什么都不做
+     */
     @Override
     public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
         if (ctx.channel().isActive() && ctx.channel().isRegistered()) {
@@ -256,11 +286,19 @@ public class IdleStateHandler extends ChannelDuplexHandler {
         }
     }
 
+    /**
+     * one-to-zero:
+     *  handler 被移除时调用 destroy 销毁
+     */
     @Override
     public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
         destroy();
     }
 
+    /**
+     * one-to-zero:
+     *  当 channel 注册事件发生，如果是 channel 是激活状态，则初始化
+     */
     @Override
     public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
         // Initialize early if channel is active already.
@@ -270,6 +308,11 @@ public class IdleStateHandler extends ChannelDuplexHandler {
         super.channelRegistered(ctx);
     }
 
+    /**
+     * one-to-zero:
+     *  只有在触发 channelActive() 事件之前添加此 handler，才会调用此方法。如果用户在 channelActive()事件之后添加此 handler，
+     *  beforeAdd() 将调用 initialize()。
+     */
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
         // This method will be invoked only if this handler was added
@@ -279,6 +322,10 @@ public class IdleStateHandler extends ChannelDuplexHandler {
         super.channelActive(ctx);
     }
 
+    /**
+     * one-to-zero:
+     *  通道不活跃时，调用 destroy 销毁
+     */
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         destroy();
@@ -287,7 +334,9 @@ public class IdleStateHandler extends ChannelDuplexHandler {
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+        /* 如果开启了读 或者 读写监听 */
         if (readerIdleTimeNanos > 0 || allIdleTimeNanos > 0) {
+            /* 标记相关状态 */
             reading = true;
             firstReaderIdleEvent = firstAllIdleEvent = true;
         }
@@ -296,8 +345,11 @@ public class IdleStateHandler extends ChannelDuplexHandler {
 
     @Override
     public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
+        /* 如果监听了读或者读写状态，且正在读标志是 true */
         if ((readerIdleTimeNanos > 0 || allIdleTimeNanos > 0) && reading) {
+            /* 读取完成后，记录最后读取的时间 */
             lastReadTime = ticksInNanos();
+            /* 读取完成后，标记正在读状态为 false */
             reading = false;
         }
         ctx.fireChannelReadComplete();
@@ -306,6 +358,10 @@ public class IdleStateHandler extends ChannelDuplexHandler {
     @Override
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
         // Allow writing with void promise if handler is only configured for read timeout events.
+        /*
+         * 如果监听了写事件或者读写事件，则为这个写事件添加一个 void-promise，并且设置一个 监听事件
+         * promise.unvoid() 其实就是 promise 自身
+         */
         if (writerIdleTimeNanos > 0 || allIdleTimeNanos > 0) {
             ctx.write(msg, promise.unvoid()).addListener(writeListener);
         } else {
@@ -316,6 +372,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
     private void initialize(ChannelHandlerContext ctx) {
         // Avoid the case where destroy() is called before scheduling timeouts.
         // See: https://github.com/netty/netty/issues/143
+        /* 防止重复初始化 */
         switch (state) {
         case 1:
         case 2:
@@ -323,16 +380,22 @@ public class IdleStateHandler extends ChannelDuplexHandler {
         }
 
         state = 1;
-        initOutputChanged(ctx);
 
+        /* 处理如果考虑出站数据较慢的情况，则处理响应的逻辑，默认是关闭的 */
+        initOutputChanged(ctx);
+        /* 记录最后的读和写时间为系统时间当前时间 */
         lastReadTime = lastWriteTime = ticksInNanos();
+
         if (readerIdleTimeNanos > 0) {
+            /* 添加定时读任务，并且返回 future */
             readerIdleTimeout = schedule(ctx, new ReaderIdleTimeoutTask(ctx), readerIdleTimeNanos, TimeUnit.NANOSECONDS);
         }
         if (writerIdleTimeNanos > 0) {
+            /* 添加定时写任务，并且返回 future */
             writerIdleTimeout = schedule(ctx, new WriterIdleTimeoutTask(ctx), writerIdleTimeNanos, TimeUnit.NANOSECONDS);
         }
         if (allIdleTimeNanos > 0) {
+            /* 添加定时读写任务，并且返回 future */
             allIdleTimeout = schedule(ctx, new AllIdleTimeoutTask(ctx), allIdleTimeNanos, TimeUnit.NANOSECONDS);
         }
     }
@@ -348,6 +411,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
      * This method is visible for testing!
      */
     ScheduledFuture<?> schedule(ChannelHandlerContext ctx, Runnable task, long delay, TimeUnit unit) {
+        /** {@link io.netty.util.concurrent.AbstractScheduledEventExecutor#schedule(Callable, long, TimeUnit)}  }*/
         return ctx.executor().schedule(task, delay, unit);
     }
 
@@ -394,6 +458,8 @@ public class IdleStateHandler extends ChannelDuplexHandler {
 
     /**
      * @see #hasOutputChanged(ChannelHandlerContext, boolean)
+     * one-to-zero:
+     *  这里的逻辑应该是处理 考虑出站时较慢的情况
      */
     private void initOutputChanged(ChannelHandlerContext ctx) {
         if (observeOutput) {
@@ -464,6 +530,12 @@ public class IdleStateHandler extends ChannelDuplexHandler {
         return false;
     }
 
+    /**
+     * one-to-zero:
+     *  对 Runnable 进行封装，主要是判断了一下当前 channel 的状态是否时候 open
+     *  是 open 则运行 run
+     *  否则直接返回
+     */
     private abstract static class AbstractIdleTask implements Runnable {
 
         private final ChannelHandlerContext ctx;
@@ -484,6 +556,13 @@ public class IdleStateHandler extends ChannelDuplexHandler {
         protected abstract void run(ChannelHandlerContext ctx);
     }
 
+    /**
+     * one-to-zero:
+     *  ReaderIdleTimeoutTask 就是一个定时任务，在 netty 读取完成 IO 操作后，就会处理 task 队列，其中就包括这个任务
+     *  1 获取过期时间，然后判断是否到期
+     *  2 如果到期：创建对应事件 event(读、写、读写)，然后传递给下一个 handler 的 fireUserEventTriggered 的方法
+     *  3 如果未到：创建定时任务，更新过期时间然后放入定时任务队列 queue 中
+     */
     private final class ReaderIdleTimeoutTask extends AbstractIdleTask {
 
         ReaderIdleTimeoutTask(ChannelHandlerContext ctx) {
@@ -492,19 +571,31 @@ public class IdleStateHandler extends ChannelDuplexHandler {
 
         @Override
         protected void run(ChannelHandlerContext ctx) {
+            /* 获取读超时 间隔时间 纳秒 eg: 读心跳 10s 则 nextDelay = 10 * 毫秒 * 纳秒 = 10000000000 */
             long nextDelay = readerIdleTimeNanos;
+            /*
+             * 如果没有正在读取数据，即 reading = false
+             * 说明 netty 考虑到了如果 read 操作很费时间，还正在读取，那么肯定没有超时，即 nextDelay 肯定 > 0
+             */
             if (!reading) {
+                /*
+                 * ticksInNanos() - lastReadTime  = 当前时间减去最后一次读事件的间隔 gap
+                 * 用心跳时间减去这个 gap ，如果 <= 0，说明至少心跳时间内间隔没有发生心跳
+                 *  如果 > 0 ，说明还没有到心跳时间
+                 */
                 nextDelay -= ticksInNanos() - lastReadTime;
             }
 
             if (nextDelay <= 0) {
                 // Reader is idle - set a new timeout and notify the callback.
+                /* 因为每次添加一个任务只会执行一次，所以这里再次添加该任务 */
                 readerIdleTimeout = schedule(ctx, this, readerIdleTimeNanos, TimeUnit.NANOSECONDS);
 
                 boolean first = firstReaderIdleEvent;
                 firstReaderIdleEvent = false;
 
                 try {
+                    /* 创建对应事件 event，然后将这个事件传递到 pipeline 中，供后续用户的 handler 可以处理 fireUserEventTriggered 方法 */
                     IdleStateEvent event = newIdleStateEvent(IdleState.READER_IDLE, first);
                     channelIdle(ctx, event);
                 } catch (Throwable t) {
@@ -512,11 +603,16 @@ public class IdleStateHandler extends ChannelDuplexHandler {
                 }
             } else {
                 // Read occurred before the timeout - set a new timeout with shorter delay.
+                /* 如果没有超时，则创建新的定时任务放在 queue 中，这里的过期时间则是前面计算出来的最新时间 */
                 readerIdleTimeout = schedule(ctx, this, nextDelay, TimeUnit.NANOSECONDS);
             }
         }
     }
 
+    /**
+     * one-to-zero:
+     *  分析逻辑详见 {@link ReaderIdleTimeoutTask}
+     */
     private final class WriterIdleTimeoutTask extends AbstractIdleTask {
 
         WriterIdleTimeoutTask(ChannelHandlerContext ctx) {
@@ -552,6 +648,10 @@ public class IdleStateHandler extends ChannelDuplexHandler {
         }
     }
 
+    /**
+     * one-to-zero:
+     *  分析逻辑详见 {@link ReaderIdleTimeoutTask}
+     */
     private final class AllIdleTimeoutTask extends AbstractIdleTask {
 
         AllIdleTimeoutTask(ChannelHandlerContext ctx) {

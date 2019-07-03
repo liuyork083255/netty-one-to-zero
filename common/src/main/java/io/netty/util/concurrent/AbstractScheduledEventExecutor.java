@@ -53,8 +53,7 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
 
     PriorityQueue<ScheduledFutureTask<?>> scheduledTaskQueue() {
         if (scheduledTaskQueue == null) {
-            scheduledTaskQueue = new DefaultPriorityQueue<ScheduledFutureTask<?>>(
-                    SCHEDULED_FUTURE_TASK_COMPARATOR,
+            scheduledTaskQueue = new DefaultPriorityQueue<ScheduledFutureTask<?>>(SCHEDULED_FUTURE_TASK_COMPARATOR,
                     // Use same initial capacity as java.util.PriorityQueue
                     11);
         }
@@ -171,10 +170,11 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
         if (delay < 0) {
             delay = 0;
         }
+        /* 是一个空校验 */
         validateScheduled0(delay, unit);
 
-        return schedule(new ScheduledFutureTask<V>(
-                this, callable, ScheduledFutureTask.deadlineNanos(unit.toNanos(delay))));
+        /* 创建任务，添加至任务 queue 中 */
+        return schedule(new ScheduledFutureTask<V>(this, callable, ScheduledFutureTask.deadlineNanos(unit.toNanos(delay))));
     }
 
     @Override
@@ -235,6 +235,7 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
 
     <V> ScheduledFuture<V> schedule(final ScheduledFutureTask<V> task) {
         if (inEventLoop()) {
+            /* 将任务添加至任务队列中 */
             scheduledTaskQueue().add(task);
         } else {
             execute(new Runnable() {
