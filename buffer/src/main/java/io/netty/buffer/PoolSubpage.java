@@ -16,6 +16,11 @@
 
 package io.netty.buffer;
 
+/**
+ * one-to-zero:
+ *  sub-page 是对 page 进一步细分的 buf，因为 page 默认大小为 8k
+ *  所以 sub-page 进一步细分，但是大小不确定
+ */
 final class PoolSubpage<T> implements PoolSubpageMetric {
 
     final PoolChunk<T> chunk;

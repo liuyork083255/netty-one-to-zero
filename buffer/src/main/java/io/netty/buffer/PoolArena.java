@@ -29,12 +29,35 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static io.netty.util.internal.ObjectUtil.checkPositiveOrZero;
 import static java.lang.Math.max;
 
+/**
+ * one-to-zero:
+ *  由于 Netty 通常用于高并发系统，所以各个线程进行内存分配时竞争不可避免，这可能会极大的影响内存分配的效率，
+ *  为了缓解高并发时的线程竞争，Netty 允许使用者创建多个分配器（Arena）来分离锁，提高内存分配效率。
+ *  在 {@link PooledByteBufAllocator} 中静态代码块中根据 key 设置多少个 PoolArena，默认是和线程个数一样，即为 CPU 核心数的两倍
+ *
+ *  一个 PoolArena 对应一个 loop 线程，loop 线程可以通过 PoolArena 分配内存。
+ *  一个 PoolArena 是由多个 chunk 组成的大块内存区域。
+ *
+ *  在 Arena 中由 {@link #tinySubpagePools} 和 {@link #smallSubpagePools} 来缓存分配给tiny（小于512）和small（大等于512）的内存页
+ *
+ */
 abstract class PoolArena<T> implements PoolArenaMetric {
     static final boolean HAS_UNSAFE = PlatformDependent.hasUnsafe();
 
+    /**
+     * 内存分配概念上理解是：Arena -> Chunk -> Page -> Tiny|Small
+     * 但是真实大小分配类型为下面三种
+     *   1 分配的内存大小小于512时内存池分配 tiny 块，
+     *   2 大小在 [512，pageSize] 区间时分配 small 块，tiny 块和 small 块基于page分配，
+     *   3 分配的大小在(pageSize，chunkSize]区间时分配 normal 块，normal 块基于 chunk 分配，
+     *   4 内存大小超过 chunk，内存池无法分配这种大内存，直接由 JVM 堆分配(针对堆内存)，内存池也不会缓存这种内存。
+     */
     enum SizeClass {
+        /** 由 {@link #tinySubpagePools} 保存的 小于 512 */
         Tiny,
+        /** 由 {@link #smallSubpagePools} 保存的大于等于 512，但是小于 page 大小 */
         Small,
+        /** 由 {@link #q050} 系列保存的大于 page 大小的缓存 */
         Normal
     }
 
@@ -50,15 +73,39 @@ abstract class PoolArena<T> implements PoolArenaMetric {
     final int numSmallSubpagePools;
     final int directMemoryCacheAlignment;
     final int directMemoryCacheAlignmentMask;
+
+    /**
+     * tinySubpagePools 是对内存小于 512 的保存数组
+     */
     private final PoolSubpage<T>[] tinySubpagePools;
+
+    /**
+     * smallSubpagePools 是对内存大于等于 512 的保存数组，但是肯定小于 page 的大小
+     */
     private final PoolSubpage<T>[] smallSubpagePools;
 
+    /*
+     * 这六个 list 也是链表串联的
+     * qInit -> q000 -> q025 -> q050 -> q075 -> q100
+     */
+    /** 存储剩余内存50-100%个 chunk */
     private final PoolChunkList<T> q050;
+
+    /** 存储剩余内存25-75%的 chunk */
     private final PoolChunkList<T> q025;
+
+    /** 存储剩余内存1-50%的 chunk */
     private final PoolChunkList<T> q000;
+
+    /** 存储剩余内存0-25%的 chunk */
     private final PoolChunkList<T> qInit;
+
+    /** 存储剩余内存75-100%个 chunk */
     private final PoolChunkList<T> q075;
+
+    /** 存储剩余内存100% chunk */
     private final PoolChunkList<T> q100;
+
 
     private final List<PoolChunkListMetric> chunkListMetrics;
 
@@ -334,9 +381,18 @@ abstract class PoolArena<T> implements PoolArenaMetric {
         return table[tableIdx];
     }
 
+    /**
+     * 根据参数分配内存
+     *   1 请求的内存大小是否超过了 chunkSize=16MiB，如果已超出说明一个该内存已经超出了一个 chunk 能分配的范围，这种内存内存池无法分配应由 JVM分配(针对堆内存)，直接返回原始大小。
+     *   2 请求大小大于等于512，返回一个512的2次幂倍数当做最终的内存大小，当原始大小是512时，返回512，当原始大小在(512，1024]区间，返回1024，当在(1024，2048]区间，返回2048等等。
+     *   3 请求大小小于512，返回一个16的整数倍，原始大小(0，16]区间返回16，(16，32]区间返回32，(32，48]区间返回48等等，这些大小的内存块在内存池中叫 tiny 块。
+     *
+     * 返回值是计算后分配的大小值
+     */
     int normalizeCapacity(int reqCapacity) {
         checkPositiveOrZero(reqCapacity, "reqCapacity");
 
+        /* 判断需要分配的内存是否大于 chunkSize = 16MiB */
         if (reqCapacity >= chunkSize) {
             return directMemoryCacheAlignment == 0 ? reqCapacity : alignCapacity(reqCapacity);
         }
