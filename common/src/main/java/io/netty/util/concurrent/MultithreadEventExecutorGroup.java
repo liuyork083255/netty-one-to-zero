@@ -35,17 +35,26 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
      * 封装真正的线程执行器 NioEventLoop
      */
     private final EventExecutor[] children;
+
+    /**
+     * 此 set 是对上方的执行器数组的一个副本，并且这个副本只读
+     */
     private final Set<EventExecutor> readonlyChildren;
+
     /**
      * one-to-zero:
      * 终止的线程个数
+     * 中断执行器的数量，如果 group 被中断则会遍历调用 children 的中断方法，而每个 children 被中断都会进行一个计数
+     * 而 terminatedChildren 则是对中断 children 的计数
      */
     private final AtomicInteger terminatedChildren = new AtomicInteger();
+
     /**
      * one-to-zero:
      * 线程池终止时的异步结果
      */
     private final Promise<?> terminationFuture = new DefaultPromise(GlobalEventExecutor.INSTANCE);
+
     /**
      * one-to-zero:
      *  线程选择器
@@ -153,24 +162,34 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
          */
         chooser = chooserFactory.newChooser(children);
 
+        /* 创建一个 future 的监听器用于监听终止结果 */
         final FutureListener<Object> terminationListener = new FutureListener<Object>() {
             @Override
             public void operationComplete(Future<Object> future) throws Exception {
+                /* 当此执行组中的执行器被关闭的时候回调用此方法进入这里，这里进行终止数加一然后比较是否已经达到了执行器的总数 */
                 if (terminatedChildren.incrementAndGet() == children.length) {
+                    /* 如果没有则跳过，如果有则设置当前执行器的终止 future 为 success 为 null */
                     terminationFuture.setSuccess(null);
                 }
             }
         };
 
+        /* 遍历创建好的执行器动态添加终止 future 的结果监听器，当监听器触发则会进入上方的内部类实现 */
         for (EventExecutor e: children) {
             e.terminationFuture().addListener(terminationListener);
         }
 
+        /* 创建一个 children 的镜像 set */
         Set<EventExecutor> childrenSet = new LinkedHashSet<EventExecutor>(children.length);
+        /* 拷贝这个 set */
         Collections.addAll(childrenSet, children);
+        /* 并且设置此 set 内的所有数据不允许修改然后返回设置给 readonlyChildren */
         readonlyChildren = Collections.unmodifiableSet(childrenSet);
     }
 
+    /**
+     * 获取默认的线程工厂并且传入当前类名
+     */
     protected ThreadFactory newDefaultThreadFactory() {
         return new DefaultThreadFactory(getClass());
     }
@@ -180,8 +199,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
         /**
          * one-to-zero:
          * 每一个连接上来，都会调用这个方法选择一个线程执行器
-         *
-         *
+         * next 则是使用了选择器的next方法
          */
         return chooser.next();
     }
@@ -209,6 +227,10 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
      */
     protected abstract EventExecutor newChild(Executor executor, Object... args) throws Exception;
 
+    /**
+     * 之前说过调用线程组的关闭其实就是遍历执行器集合的关闭方法
+     * 因为之前加了监听器去处理返回结果所以此处返回的 future 用于监听是否执行结束了
+     */
     @Override
     public Future<?> shutdownGracefully(long quietPeriod, long timeout, TimeUnit unit) {
         for (EventExecutor l: children) {
@@ -260,9 +282,11 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
         return true;
     }
 
+    /**
+     * 等待时间范围是否执行终止完成
+     */
     @Override
-    public boolean awaitTermination(long timeout, TimeUnit unit)
-            throws InterruptedException {
+    public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
         long deadline = System.nanoTime() + unit.toNanos(timeout);
         loop: for (EventExecutor l: children) {
             for (;;) {

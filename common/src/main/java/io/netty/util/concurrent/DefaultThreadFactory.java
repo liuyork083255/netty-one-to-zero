@@ -27,12 +27,18 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class DefaultThreadFactory implements ThreadFactory {
 
+    /** 线程组的id，这里组代表是工厂，因为工厂是可以 new 的如果不分配到时候很难看出是哪里个工厂创建的线程 */
     private static final AtomicInteger poolId = new AtomicInteger();
 
+    /** 创建线程的自增id */
     private final AtomicInteger nextId = new AtomicInteger();
+    /** 线程名前缀 */
     private final String prefix;
+    /** 是否是守护线程 */
     private final boolean daemon;
+    /** 当前线程的优先级 */
     private final int priority;
+    /** 创建线程所属的线程组，可以为null系统会使用默认的线程组 */
     protected final ThreadGroup threadGroup;
 
     public DefaultThreadFactory(Class<?> poolType) {
@@ -98,6 +104,13 @@ public class DefaultThreadFactory implements ThreadFactory {
         this.threadGroup = threadGroup;
     }
 
+    /**
+     *
+     * poolType 是 Class 类型他最终会被转换成类名用于poolName的使用
+     * poolName 线程名但是不是完整的，它会拼接一些其他数据比如poolId
+     * daemon 是否为守护线程除非手动设置否则默认都是 false
+     * priority 线程的优先级 默认是 NORM_PRIORITY 也是系统默认的
+     */
     public DefaultThreadFactory(String poolName, boolean daemon, int priority) {
         this(poolName, daemon, priority, System.getSecurityManager() == null ?
                 Thread.currentThread().getThreadGroup() : System.getSecurityManager().getThreadGroup());

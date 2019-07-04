@@ -20,6 +20,9 @@ import java.util.EventListener;
 /**
  * Listens to the result of a {@link Future}.  The result of the asynchronous operation is notified once this listener
  * is added by calling {@link Future#addListener(GenericFutureListener)}.
+ *
+ * one-to-zero:
+ *  监听 Future 的操作，当 Future 中添加了监听器，Future 的个别方法被调用时则会触发添加的监听器，一般有 success、failure 等还有些都是根据具体 future 实现走的
  */
 public interface GenericFutureListener<F extends Future<?>> extends EventListener {
 
@@ -27,6 +30,9 @@ public interface GenericFutureListener<F extends Future<?>> extends EventListene
      * Invoked when the operation associated with the {@link Future} has been completed.
      *
      * @param future  the source {@link Future} which called this callback
+     * one-to-zero:
+     *  操作成功后的调用，传入Future则是操作完成的Future
+     *
      */
     void operationComplete(F future) throws Exception;
 }

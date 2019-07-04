@@ -20,7 +20,9 @@ import java.util.Timer;
  *
  *        但是看完源码返现，如果构造方法传入负值，则直接异常了，上面说的这种情况不是很理解
  *
- *
+ *  Note:
+ *      这是 java-util 下的定时器，默认只有一个线程执行，juc 下还提供了基于线程池的定时任务工具类 {@link java.util.concurrent.ScheduledThreadPoolExecutor}
+ *      该类相接见：https://www.jianshu.com/p/dd2971b47af4
  *
  */
 public class TimerS {

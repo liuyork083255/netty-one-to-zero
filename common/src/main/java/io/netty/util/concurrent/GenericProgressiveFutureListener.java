@@ -16,6 +16,10 @@
 
 package io.netty.util.concurrent;
 
+/**
+ * one-to-zero:
+ *  通用的进度监听器，约束了Future的类型必须继承于ProgressiveFuture
+ */
 public interface GenericProgressiveFutureListener<F extends ProgressiveFuture<?>> extends GenericFutureListener<F> {
     /**
      * Invoked when the operation has progressed.
@@ -23,6 +27,8 @@ public interface GenericProgressiveFutureListener<F extends ProgressiveFuture<?>
      * @param progress the progress of the operation so far (cumulative)
      * @param total the number that signifies the end of the operation when {@code progress} reaches at it.
      *              {@code -1} if the end of operation is unknown.
+     * one-to-zero:
+     *  操作进度触发将会调用此方法，传入当前 future 和 当前的进度 和 总的进度
      */
     void operationProgressed(F future, long progress, long total) throws Exception;
 }

@@ -22,6 +22,8 @@ import java.util.EventListener;
 /**
  * An {@link EventListener} listener which will be called once the sending task associated with future is
  * being transferred.
+ * one-to-zero:
+ *  针对 GenericProgressiveFutureListener 起的别名并没有什么，只是将约束更加精细化了
  */
 public interface ChannelProgressiveFutureListener extends GenericProgressiveFutureListener<ChannelProgressiveFuture> {
     // Just a type alias

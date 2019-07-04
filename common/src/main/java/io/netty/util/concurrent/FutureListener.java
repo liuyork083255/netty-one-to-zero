@@ -24,5 +24,7 @@ package io.netty.util.concurrent;
  *     public void operationComplete(Future f) { .. }
  * });
  * </pre>
+ * one-to-zero:
+ *  针对 GenericFutureListener 起的别名，对 GenericFutureListener 的泛型 Future 做了隐藏
  */
 public interface FutureListener<V> extends GenericFutureListener<Future<V>> { }
