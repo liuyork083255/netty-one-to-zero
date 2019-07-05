@@ -102,27 +102,85 @@ import java.util.Deque;
  *
  * memoryMap[id]= depth_of_id  is defined above
  * depthMap[id]= x  indicates that the first node which is free to be allocated is at depth x (from root)
+ *
+ * one-to-zero:
+ *  Chunk 的大小 = 2^{maxOrder} * pageSize，maxOrder 是 pageSize 二进制0的个数，因为 Chunk 采用完全二叉树算法管理 page，
+ *  数的深度就是 maxOrder，page 默认大小是 8K，chunk 默认大小是 16MiB，所以一个 chunk 内部默认有 2048 个 page，所以这个完全二叉树共有 11 层，
+ *  最后一层节点数与 page 数量相等。
+ *
+ *  所有子节点的管理的内存也属于其父节点。如果我们想获取一个 8K 的内存，则只需在第 11 层找一个可用节点即可，而如果我们需要 16K 的数据，则需要在第 10 层找一个可用节点
+ *  Note：如果一个节点的子节点已经被分配了，则该节点不能被分配。
+ *
+ *  1 Chunk 内部管理着一个大块的连续内存区域，将这个内存区域切分成均等的大小，每一个大小称之为一个Page -> 即 Chunk 里面全是一个个 Page
+ *  2 Chunk 内部采用完全二叉树的方式对 Page 进行管理
+ *  3 Chunk 可以对大于等于 PageSize 的内存申请进行分配和管理
+ *  4 但是如果申请小于 PageSize 的申请也要消耗掉一个Page的话就太浪费。因此设计一个内存结构 SubPage，该结构将一个 Page 的空间进行均分后分配，内部通过位图的方式管理分配信息。
+ *  5 有了 Chunk 和 SubPage 后，对于大于 PageSize 的申请走 Chunk 的分配，小于 PageSize 的申请通过 SubPage 分配
+ *  6 而为了进一步加快分配和释放的性能，设计一个线程变量 PoolThreadCache，该线程变量以线程缓存的方式将一部分内存空间缓存起来，当需要申请的时候优先尝试线程缓存。
+ *    通过减少并发冲突的方式提高性能。
+ *
+ *  分配算法（参考/doc/内存分配Page完全二叉树结构图.png）：
+ *      · 叶子节点的初始容量是单位大小。其可分配的容量是0（被分配走后）或者初始容量。
+ *      · 父节点的可分配容量是两个子节点可分配容量的较大值；如果2个子节点均为初始容量，则父节点可分配容量为子节点分配容量之和（也就是2倍）；这条规则尤为重要，其是整个分配的核心。
+ *      · 分配时首先需要将申请大小标准化为2n大小，定义该大小为目标大小。判断根节点可分配容量是否大于目标大小，如果大于才可以执行分配。
+ *      · 通过计算公式算出可允许分配的二叉树层级（该层级是节点容量大于等于目标大小的最深层级）。得到目标层级后，从根节点开始向下搜索，直到搜索到目标层级停止。
+ *         搜索过程中如果左子节点可分配容量小于目标大小则切换到右子节点继续搜索。
+ *      · 如果分配成功，由于本节点的可分配容量下降至0，因此需要更新父节点的可分配容量。并且该操作需要不断向父节点回溯执行，直到根节点为止
+ *
+ *  释放算法（释放内存就是申请内存的逆操作）：
+ *      · 通过节点下标寻找申请节点。
+ *      · 将申请节点的可分配容量从0恢复到初始可分配容量。
+ *      · 如果当前节点和兄弟节点的可分配容量都是初始可分配容量，更新父节点的可分配容量为其初始可分配容量；
+ *         否则更新父节点的可分配容量为2个子节点中的较大值。重复该动作直到根节点为止。
+ *
+ * Chunk 中通过完全二叉树来管理 Page，并且使用数组来代表完全二叉树（根节点从下标1开始，这样左子节点的下标就是父节点下标2倍，父节点下标就是当前节点下标除以2），
+ * 该数组存储的是该下标节点当前可分配容量。当最终申请成功时，是寻找到了一个可以分配的节点，返回该节点的下标就算申请完成。
+ *
+ * Chunk 移动：
+ *      随着内存的申请和释放，Chunk 内部空间的使用率也在不断变化中。为了提高内存的使用率和分配效率。
+ *      Arena 内部使用 ChunkList 将 chunk 进行集中管理。每一个 ChunkList 都代表着不同的使用率区间。
+ *      当 Chunk 的使用率变化时可能就会在不同的 ChunkList 中移动。
+ *
+ *
  */
 final class PoolChunk<T> implements PoolChunkMetric {
 
     private static final int INTEGER_SIZE_MINUS_ONE = Integer.SIZE - 1;
 
     final PoolArena<T> arena;
+    /**
+     * memory 是一个容量为 chunkSize 的 byte[](heap方式)或 ByteBuffer(direct方式)
+     */
     final T memory;
     final boolean unpooled;
     final int offset;
+
     private final byte[] memoryMap;
+
     private final byte[] depthMap;
+
     private final PoolSubpage<T>[] subpages;
+
     /** Used to determine if the requested capacity is equal to or greater than pageSize. */
     private final int subpageOverflowMask;
+    /** 每个 page 的大小，默认为 8K=8192 */
     private final int pageSize;
+    /** 13,   2 ^ 13 = 8192 */
     private final int pageShifts;
+    /** 默认 11 */
     private final int maxOrder;
+    /** 默认 16MiB */
     private final int chunkSize;
+
     private final int log2ChunkSize;
+
     private final int maxSubpageAllocs;
-    /** Used to mark memory as unusable */
+
+    /**
+     * Used to mark memory as unusable
+     * 用于标记内存不可用
+     * 12, 当 memoryMap[id] = unusable 时，则表示id节点已被分配
+     */
     private final byte unusable;
 
     // Use as cache for ByteBuffer created from the memory. These are just duplicates and so are only a container
@@ -150,18 +208,26 @@ final class PoolChunk<T> implements PoolChunkMetric {
         this.maxOrder = maxOrder;
         this.chunkSize = chunkSize;
         this.offset = offset;
+
         unusable = (byte) (maxOrder + 1);
+        /* 2 ^ 24 = 16M */
         log2ChunkSize = log2(chunkSize);
         subpageOverflowMask = ~(pageSize - 1);
         freeBytes = chunkSize;
 
         assert maxOrder < 30 : "maxOrder should be < 30, but is: " + maxOrder;
+        /* 2048, 最多能被分配的 SubPage 个数 */
         maxSubpageAllocs = 1 << maxOrder;
 
         // Generate the memory map.
         memoryMap = new byte[maxSubpageAllocs << 1];
         depthMap = new byte[memoryMap.length];
         int memoryMapIndex = 1;
+        /*
+         *  分配完成后：
+         *  memoryMap->[0, 0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3…]
+         *  depthMap->[0, 0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3…]
+         */
         for (int d = 0; d <= maxOrder; ++ d) { // move down the tree one level at a time
             int depth = 1 << d;
             for (int p = 0; p < depth; ++ p) {
@@ -172,6 +238,10 @@ final class PoolChunk<T> implements PoolChunkMetric {
             }
         }
 
+        /*
+         *  subPages 包含了 maxSubPageAllocs(2048) 个 PoolSubPage, 每个 subPage 会从 chunk 中分配到自己的内存段，
+         *  两个 subPage 不会操作相同的段，此处只是初始化一个数组，还没有实际的实例化各个元素
+         */
         subpages = newSubpageArray(maxSubpageAllocs);
         cachedNioBuffers = new ArrayDeque<ByteBuffer>(8);
     }

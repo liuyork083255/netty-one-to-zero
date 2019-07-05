@@ -41,7 +41,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * one-to-zero:
  *  内存分配区分为两类：线程私有分配区 和 内存池公有分配区
  *  PoolThreadCache 就是线程私有分配区，目的是为了为每一个线程缓存内存，减小线程竞争
- *  内存大小分为三类 {@link PoolArena.SizeClass}，而 PoolThreadCache 则是对应缓存了这三类内存：
+ *  内存大小分为三类 {@link PoolArena.SizeClass}，而 PoolThreadCache 则是对应缓存了这三类
+ *
+ *  在分配这三类缓存时，都先从 PoolThreadCache 中申请，如果申请失败了就从对应的 内存池公有分配区 申请
  *
  *
  */

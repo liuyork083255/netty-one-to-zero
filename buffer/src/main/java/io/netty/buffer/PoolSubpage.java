@@ -20,6 +20,29 @@ package io.netty.buffer;
  * one-to-zero:
  *  sub-page 是对 page 进一步细分的 buf，因为 page 默认大小为 8k
  *  所以 sub-page 进一步细分，但是大小不确定
+ *
+ * 分配算法：
+ *      · 将申请大小标准化为2的n次方大小，定义为请求大小。
+ *      · 选择合适的 Chunk 申请一个 Page。将得到的 Page 初始化为 SubPage，其内部按照请求大小均分为 h 份；并且将该 SubPage 放入 Arena 的 SubPage 列表中。
+ *      · 从 SubPage 中选择一份没有使用的均分空间用于分配。设置其对应位图位置为 true（true意味着使用）
+ *      · 后续有类似的请求，优先从 Arena 的 SubPage 列表中获取符合需求（SubPage的切分大小等于请求大小）的 SubPage 进行分配。
+ *      · 如果一个 SubPage 的内部空间全部被分配完毕，则从 Arena 的列表中删除。
+ * 释放算法：
+ *      · 将 SubPage 对应区域的位图设置为false
+ *      · 如果本 SubPage 的可用区域刚恢复为1，则将 SubPage 添加到 Arena 的 SubPage 列表中
+ *
+ * 管理方式：
+ *      Chunk 本身是不进行 SubPage 的管理的，只负责 SubPage 的初始化和存储。具体的分配动作则移交给 Arena 负责。
+ *      核心策略如下：
+ *          · 按照请求大小区分为 tiny（区间为[0,512)）,small（区间为[512,pageSize)）,normal(区间为[pageSize,chunkSize])
+ *          · 在 tiny 区间，按照 16B 为大小增长幅度，创建长度为 32 的 SubPage 数组，数组中每一个 SubPage 代表一个固定大小。
+ *             SubPage 本身形成一个链表。数组中的 SubPage 作为链表的头，是一个特殊节点，不参与空间分配，只是起到标识作用。
+ *          · 在 small 区间，按照每次倍增为增长服务，创建长度为 n（n为从512倍增到pageSize的次数）的 SubPage 数组，数组的含义同 tiny 的 SubPage 数组。
+ *          · 每次申请小于 pageSize 的空间时，根据标准化后的申请大小，从 tiny 区间或 small 区间寻找到对应大小的数组下标，并且在 SubPage 链表上寻找 SubPage 用于分配空间。
+ *          · 如果 SubPage 链表上没有可用节点时，则从 Chunk 上申请一个 Page，然后初始化一个 SubPage 用于分配。
+ *
+ * SubPage 实际上只是定义了一些元信息，本身不做任何存储
+ *
  */
 final class PoolSubpage<T> implements PoolSubpageMetric {
 
