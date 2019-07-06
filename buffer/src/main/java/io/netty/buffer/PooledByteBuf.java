@@ -52,8 +52,7 @@ abstract class PooledByteBuf<T> extends AbstractReferenceCountedByteBuf {
         this.recyclerHandle = (Handle<PooledByteBuf<T>>) recyclerHandle;
     }
 
-    void init(PoolChunk<T> chunk, ByteBuffer nioBuffer,
-              long handle, int offset, int length, int maxLength, PoolThreadCache cache) {
+    void init(PoolChunk<T> chunk, ByteBuffer nioBuffer, long handle, int offset, int length, int maxLength, PoolThreadCache cache) {
         init0(chunk, nioBuffer, handle, offset, length, maxLength, cache);
     }
 
@@ -61,8 +60,7 @@ abstract class PooledByteBuf<T> extends AbstractReferenceCountedByteBuf {
         init0(chunk, null, 0, chunk.offset, length, length, null);
     }
 
-    private void init0(PoolChunk<T> chunk, ByteBuffer nioBuffer,
-                       long handle, int offset, int length, int maxLength, PoolThreadCache cache) {
+    private void init0(PoolChunk<T> chunk, ByteBuffer nioBuffer, long handle, int offset, int length, int maxLength, PoolThreadCache cache) {
         assert handle >= 0;
         assert chunk != null;
 
@@ -81,9 +79,11 @@ abstract class PooledByteBuf<T> extends AbstractReferenceCountedByteBuf {
      * Method must be called before reuse this {@link PooledByteBufAllocator}
      */
     final void reuse(int maxCapacity) {
+        /* 设置这个 buf 的最大容量 */
         maxCapacity(maxCapacity);
         resetRefCnt();
         setIndex0(0, 0);
+        /* 读写mark重新重置为0 */
         discardMarks();
     }
 

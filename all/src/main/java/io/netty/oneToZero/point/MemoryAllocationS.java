@@ -24,7 +24,7 @@ package io.netty.oneToZero.point;
  *          2 请求大小大于等于512，返回一个512的2次幂倍数当做最终的内存大小，当原始大小是512时，返回512，当原始大小在(512，1024]区间，返回1024，当在(1024，2048]区间，返回2048等等。
  *          3 请求大小小于512，返回一个16的整数倍，原始大小(0，16]区间返回16，(16，32]区间返回32，(32，48]区间返回48等等，这些大小的内存块在内存池中叫 tiny 块。
  *      1 分配的内存大小小于512时内存池分配 tiny 块，
- *      2 大小在 [512，pageSize] 区间时分配 small 块，tiny 块和 small 块基于page分配，
+ *      2 大小在 [512，pageSize] 区间时分配 small 块，tiny 块和 small 块基于 page 分配，
  *      3 分配的大小在(pageSize，chunkSize]区间时分配 normal 块，normal 块基于 chunk 分配，
  *      4 内存大小超过 chunk，内存池无法分配这种大内存，直接由 JVM 堆分配(针对堆内存)，内存池也不会缓存这种内存。
  *
@@ -32,7 +32,8 @@ package io.netty.oneToZero.point;
  *      Buddy 分配是把一块内存块等量分割回收时候进行合并，尽可能保证系统中有足够大的连续内存
  *
  *
- *
+ *  物理内存分配是以 chunk 为单位进行申请的，{@link io.netty.buffer.PoolArena#allocateNormal}，
+ *  也就是每次都是真实分配物理内存大小为 chunkSize，是一块连续的空间，然后 page subPage 进行各自的划分，管理着自己的内存下标位置
  *
  *
  *

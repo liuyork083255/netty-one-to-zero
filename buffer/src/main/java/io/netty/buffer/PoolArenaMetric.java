@@ -20,6 +20,8 @@ import java.util.List;
 
 /**
  * Expose metrics for an arena.
+ * one-to-zero:
+ *  PoolArenaMetric 接口其实就是对 Arena 的信息进行度测和统计
  */
 public interface PoolArenaMetric {
 

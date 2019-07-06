@@ -42,24 +42,43 @@ package io.netty.buffer;
  *          · 如果 SubPage 链表上没有可用节点时，则从 Chunk 上申请一个 Page，然后初始化一个 SubPage 用于分配。
  *
  * SubPage 实际上只是定义了一些元信息，本身不做任何存储
+ *  Chunk 是真实的物理内存分配类，Chunk 会被均分为大小相同 page，但是这个 page 是虚拟的，真正的 page 就是 这里的 {@link PoolSubpage}
+ *  也就是说一个大小为8k的 page 其实就是一个 {@link PoolSubpage}
+ *
+ *  {@link PoolSubpage} 内部是均分的，均分值{@link #elemSize} 是根据用户第一次请求buf大小计算得来的，具体计算规则参考 {@link PoolArena#normalizeCapacity} 备注
  *
  */
 final class PoolSubpage<T> implements PoolSubpageMetric {
 
     final PoolChunk<T> chunk;
+
+    /** 当前 page 在 chunk 中的id，其实就是在 {@link PoolChunk#memoryMap} 中的值 */
     private final int memoryMapIdx;
+    /** 当前 page 在 chunk.memory 的偏移量 */
     private final int runOffset;
     private final int pageSize;
+    /** 通过对每一个二进制位的标记来修改一段内存的占用状态 */
     private final long[] bitmap;
 
     PoolSubpage<T> prev;
     PoolSubpage<T> next;
 
     boolean doNotDestroy;
+
+    /** 该 page 切分后每一段的大小 */
     int elemSize;
+
+    /** 该page包含的段数量，maxNumElems = pageSize/elemSize */
     private int maxNumElems;
+
     private int bitmapLength;
+
+    /**
+     * 下一个可用的位置
+     */
     private int nextAvail;
+
+    /** 可用的段数量 */
     private int numAvail;
 
     // TODO: Test if adding padding helps under contention
@@ -75,6 +94,10 @@ final class PoolSubpage<T> implements PoolSubpageMetric {
         bitmap = null;
     }
 
+    /**
+     * chunk
+     * @param elemSize  这个参数决定这当前这个 page 应该怎么被均分; 计算规则参考 {@link PoolArena#normalizeCapacity} 备注
+     */
     PoolSubpage(PoolSubpage<T> head, PoolChunk<T> chunk, int memoryMapIdx, int runOffset, int pageSize, int elemSize) {
         this.chunk = chunk;
         this.memoryMapIdx = memoryMapIdx;
@@ -104,6 +127,9 @@ final class PoolSubpage<T> implements PoolSubpageMetric {
 
     /**
      * Returns the bitmap index of the subpage allocation.
+     *
+     * 返回一个64位的long类型，具体含义是：
+     *  低32位表示二叉树中的分配的节点，高32位表示subPage中分配的具体位置
      */
     long allocate() {
         if (elemSize == 0) {

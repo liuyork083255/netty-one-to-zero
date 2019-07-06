@@ -99,6 +99,9 @@ final class PoolChunkList<T> implements PoolChunkListMetric {
         return false;
     }
 
+    /**
+     * 在释放内存时也会检查minUsage，如果不匹配传到上一个PoolChunkList进行检查，最终会把Chunk归还到大小跟它匹配的PoolChunkList中。
+     */
     boolean free(PoolChunk<T> chunk, long handle, ByteBuffer nioBuffer) {
         chunk.free(handle, nioBuffer);
         if (chunk.usage() < minUsage) {
@@ -136,6 +139,12 @@ final class PoolChunkList<T> implements PoolChunkListMetric {
         return prevList.move(chunk);
     }
 
+    /**
+     * 根据参数 chunk 的使用率添加到指定的 chunkList 中
+     * PoolChunkList 有两个重要的参数 minUsage 和 maxUsage，这两个参数都是使用率，
+     * 当chunk中内存可用率在 [minUsage,maxUsage] 区间时，这个chunk才会落到该 PoolChunkList 中，
+     * 否则把chunk传到下一个 PoolChunkList 进行检查
+     */
     void add(PoolChunk<T> chunk) {
         if (chunk.usage() >= maxUsage) {
             nextList.add(chunk);

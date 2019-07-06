@@ -43,7 +43,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *  PoolThreadCache 就是线程私有分配区，目的是为了为每一个线程缓存内存，减小线程竞争
  *  内存大小分为三类 {@link PoolArena.SizeClass}，而 PoolThreadCache 则是对应缓存了这三类
  *
- *  在分配这三类缓存时，都先从 PoolThreadCache 中申请，如果申请失败了就从对应的 内存池公有分配区 申请
+ *  在分配这三类缓存时，都先从 PoolThreadCache 中申请，如果申请失败了就从对应的 内存池公有分配区 申请,
+ *  在释放内存空间也是有限将内存空间添加到 PoolThreadCache 中
+ *
+ *  PoolThreadCache 的设计思路较为简单，其核心就是事先创建不同内存大小的槽位。每一个槽位都是一个
+ *  MPSCArrayQueue(采用这个结构一个是为了控制缓存空间的个数，一个也是为了性能。在缓存场景下，申请空间只有当前线程，而归还空间是可能多线程的)。
+ *  当需要申请空间时，首先尝试找到大小匹配的槽位，然后从上面的 MPSCArrayQueue 上获取内存信息。如果获取成功则分配完成
+ *
  *
  *
  */
@@ -62,7 +68,15 @@ final class PoolThreadCache {
      *
      * 其中 tiny 块的个数为 32 个
      * small 块的个数由 pageSize 来决定
-     *      它的计算公式是：pageShifts - 9，这个 pageShifts 就是pageSize 二进制表示时尾部 0 的个数，page-size 大小必须大于 4K，默认 8K：13个0
+     *      它的计算公式是：pageShifts - 9，这个 pageShifts 就是 pageSize 二进制表示时尾部 0 的个数，page-size 大小必须大于 4K，默认 8K：13个0
+     *
+     * tiny 数组和 small 数组的长度与 PoolArena 中对应的 SubPage 数组长度相同。其内在含义就是所有的 tiny 大小和 small 大小的空间都可以在缓存中被缓存
+     * normal 数组的大小根据需要缓存的最大空间大小设定。数组长度是从 pageSize 倍增到需缓存的最大空间大小所需的倍数。
+     *  这也意味着超过一定大小的空间，线程缓存是不处理的，以避免在线程内堆积过多的内存
+     *
+     * 当需要从线程缓存中申请空间时，根据申请大小从 MemoryRegionCache 数组中找到合适的 MemoryRegionCache。如果能找到，则从其 MPSCArrayQueue 中获取节点得到内存信息
+     * 当需要释放内存空间时，则优先尝试将内存空间加入到缓存中。也是一样先尝试找到合适的 MemoryRegionCache。如果能找到则尝试将内存信息放入队列中。如果队列已满，则竞争 Arena 进行标准的释放流程
+     *
      */
     private final MemoryRegionCache<byte[]>[] tinySubPageHeapCaches;
     private final MemoryRegionCache<byte[]>[] smallSubPageHeapCaches;
@@ -193,6 +207,7 @@ final class PoolThreadCache {
 
     @SuppressWarnings({ "unchecked", "rawtypes" })
     private boolean allocate(MemoryRegionCache<?> cache, PooledByteBuf buf, int reqCapacity) {
+        /* 如果缓存为空则直接返回false */
         if (cache == null) {
             // no cache found so just return false here
             return false;
@@ -315,6 +330,9 @@ final class PoolThreadCache {
         cache.trim();
     }
 
+    /**
+     * 根据内存类型选择对应的 tinyCache
+     */
     private MemoryRegionCache<?> cacheForTiny(PoolArena<?> area, int normCapacity) {
         int idx = PoolArena.tinyIdx(normCapacity);
         if (area.isDirect()) {
@@ -356,8 +374,7 @@ final class PoolThreadCache {
         }
 
         @Override
-        protected void initBuf(
-                PoolChunk<T> chunk, ByteBuffer nioBuffer, long handle, PooledByteBuf<T> buf, int reqCapacity) {
+        protected void initBuf(PoolChunk<T> chunk, ByteBuffer nioBuffer, long handle, PooledByteBuf<T> buf, int reqCapacity) {
             chunk.initBufWithSubpage(buf, nioBuffer, handle, reqCapacity);
         }
     }
@@ -377,6 +394,11 @@ final class PoolThreadCache {
         }
     }
 
+    /**
+     * PoolThreadCache 缓存的存储单元，
+     * MemoryRegionCache 中的队列存储的是内存空间信息
+     *
+     */
     private abstract static class MemoryRegionCache<T> {
         private final int size;
         private final Queue<Entry<T>> queue;
@@ -412,6 +434,8 @@ final class PoolThreadCache {
 
         /**
          * Allocate something out of the cache if possible and remove the entry from the cache.
+         * one-to-zero:
+         *  如果可能分配成功，则从线程缓存中删除这个条目
          */
         public final boolean allocate(PooledByteBuf<T> buf, int reqCapacity) {
             Entry<T> entry = queue.poll();
@@ -419,6 +443,7 @@ final class PoolThreadCache {
                 return false;
             }
             initBuf(entry.chunk, entry.nioBuffer, entry.handle, buf, reqCapacity);
+            /* 释放 entry，归还给对象池 */
             entry.recycle();
 
             // allocations is not thread-safe which is fine as this is only called from the same thread all time.
