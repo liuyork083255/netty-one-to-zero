@@ -135,6 +135,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
                 return;
             }
             final ChannelPipeline pipeline = pipeline();
+            /* 获取buf内存分配器，所有的worker都是同一个 */
             final ByteBufAllocator allocator = config.getAllocator();
             final RecvByteBufAllocator.Handle allocHandle = recvBufAllocHandle();
             allocHandle.reset(config);
@@ -143,7 +144,11 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
             boolean close = false;
             try {
                 do {
+                    /**
+                     * 分配池化内存 {@link DefaultMaxMessagesRecvByteBufAllocator.MaxMessageHandle#allocate(ByteBufAllocator)}
+                     */
                     byteBuf = allocHandle.allocate(allocator);
+
                     /**
                      * 进入 {@link io.netty.channel.socket.nio.NioSocketChannel#doReadBytes(ByteBuf)}
                      */

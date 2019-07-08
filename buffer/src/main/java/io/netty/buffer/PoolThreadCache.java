@@ -50,7 +50,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *  MPSCArrayQueue(采用这个结构一个是为了控制缓存空间的个数，一个也是为了性能。在缓存场景下，申请空间只有当前线程，而归还空间是可能多线程的)。
  *  当需要申请空间时，首先尝试找到大小匹配的槽位，然后从上面的 MPSCArrayQueue 上获取内存信息。如果获取成功则分配完成
  *
- *
+ *  这个类的创建是被 {@link PooledByteBufAllocator.PoolThreadLocalCache#initialValue()} 执行
  *
  */
 final class PoolThreadCache {
@@ -62,9 +62,9 @@ final class PoolThreadCache {
 
     // Hold the caches for the different size classes, which are tiny, small and normal.
     /**
-     * tiny 对应 {@link PoolArena.SizeClass#Tiny} 类型内存
-     * small 对应 {@link PoolArena.SizeClass#Small} 类型内存
-     * normal 对应 {@link PoolArena.SizeClass#Normal} 类型内存
+     * tiny 对应 {@link PoolArena.SizeClass#Tiny} 类型内存        长度 32
+     * small 对应 {@link PoolArena.SizeClass#Small} 类型内存      长度 4
+     * normal 对应 {@link PoolArena.SizeClass#Normal} 类型内存    长度 12
      *
      * 其中 tiny 块的个数为 32 个
      * small 块的个数由 pageSize 来决定
@@ -76,6 +76,16 @@ final class PoolThreadCache {
      *
      * 当需要从线程缓存中申请空间时，根据申请大小从 MemoryRegionCache 数组中找到合适的 MemoryRegionCache。如果能找到，则从其 MPSCArrayQueue 中获取节点得到内存信息
      * 当需要释放内存空间时，则优先尝试将内存空间加入到缓存中。也是一样先尝试找到合适的 MemoryRegionCache。如果能找到则尝试将内存信息放入队列中。如果队列已满，则竞争 Arena 进行标准的释放流程
+     *
+     */
+
+    /**
+     * Tiny、Small、Normal 的数组大小依次为32、4、3
+     * netty 为了更方便的根据请求分配时的大小找到满足需求的缓存空间所以采用这种方式缓存
+     * 分析：
+     *  针对 tiny 的内存，最小16，每次递增16，所以就是 16、32 ... 480、496 一共 32 种
+     *  针对 small 的内存，最小512，最大 pageSize, 每次递增512，所就是 512B、1KB、2KB、4KB，一共4种
+     *  针对 normal 的内存长度是3就不是很明白？？？
      *
      */
     private final MemoryRegionCache<byte[]>[] tinySubPageHeapCaches;
@@ -96,9 +106,7 @@ final class PoolThreadCache {
     // TODO: Test if adding padding helps under contention
     //private long pad0, pad1, pad2, pad3, pad4, pad5, pad6, pad7;
 
-    PoolThreadCache(PoolArena<byte[]> heapArena, PoolArena<ByteBuffer> directArena,
-                    int tinyCacheSize, int smallCacheSize, int normalCacheSize,
-                    int maxCachedBufferCapacity, int freeSweepAllocationThreshold) {
+    PoolThreadCache(PoolArena<byte[]> heapArena, PoolArena<ByteBuffer> directArena, int tinyCacheSize, int smallCacheSize, int normalCacheSize, int maxCachedBufferCapacity, int freeSweepAllocationThreshold) {
         checkPositiveOrZero(maxCachedBufferCapacity, "maxCachedBufferCapacity");
         this.freeSweepAllocationThreshold = freeSweepAllocationThreshold;
         this.heapArena = heapArena;
@@ -175,6 +183,11 @@ final class PoolThreadCache {
         }
     }
 
+    /**
+     * 返回 val 的最大2次幂
+     * 如果是 8 则返回 3
+     * 如果是 9 则返回 3
+     */
     private static int log2(int val) {
         int res = 0;
         while (val > 1) {
@@ -225,8 +238,8 @@ final class PoolThreadCache {
      * Returns {@code true} if it fit into the cache {@code false} otherwise.
      */
     @SuppressWarnings({ "unchecked", "rawtypes" })
-    boolean add(PoolArena<?> area, PoolChunk chunk, ByteBuffer nioBuffer,
-                long handle, int normCapacity, SizeClass sizeClass) {
+    boolean add(PoolArena<?> area, PoolChunk chunk, ByteBuffer nioBuffer, long handle, int normCapacity, SizeClass sizeClass) {
+        /* 在缓存数组中找到符合的元素 */
         MemoryRegionCache<?> cache = cache(area, normCapacity, sizeClass);
         if (cache == null) {
             return false;
@@ -400,13 +413,23 @@ final class PoolThreadCache {
      *
      */
     private abstract static class MemoryRegionCache<T> {
+        /** 队列长度 */
         private final int size;
+        /** 队列 */
         private final Queue<Entry<T>> queue;
+        /** Tiny/Small/Normal */
         private final SizeClass sizeClass;
+        /** 分配次数 */
         private int allocations;
 
         MemoryRegionCache(int size, SizeClass sizeClass) {
             this.size = MathUtil.safeFindNextPositivePowerOfTwo(size);
+            /*
+             * 这里使用了一个MPSC（Multiple Producer Single Consumer）队列即多个生产者单一消费者队列，
+             * 之所以使用这种类型的队列是因为 ByteBuf 的分配和释放可能在不同的线程中，
+             * 这里的多生产者即多个不同的释放线程，这样才能保证多个释放线程同时释放 ByteBuf 时所占空间正确添加到队列中
+             * 单个消费者是指只有 IO 线程才会申请
+             */
             queue = PlatformDependent.newFixedMpscQueue(this.size);
             this.sizeClass = sizeClass;
         }
@@ -501,9 +524,12 @@ final class PoolThreadCache {
         }
 
         static final class Entry<T> {
+            /** 回收该对象 */
             final Handle<Entry<?>> recyclerHandle;
+            /** ByteBuf之前分配所属的Chunk */
             PoolChunk<T> chunk;
             ByteBuffer nioBuffer;
+            /** ByteBuf 在 Chunk 中的分配信息 */
             long handle = -1;
 
             Entry(Handle<Entry<?>> recyclerHandle) {

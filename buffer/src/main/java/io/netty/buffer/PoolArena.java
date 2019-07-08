@@ -229,8 +229,16 @@ abstract class PoolArena<T> implements PoolArenaMetric {
     abstract boolean isDirect();
 
     PooledByteBuf<T> allocate(PoolThreadCache cache, int reqCapacity, int maxCapacity) {
+        /*
+         * 从对象池 Recycler 中获取 buf 对象，这buf的相关参数指针等都是重置的，也就是还没有指向真正的物理内存的地址
+         */
         PooledByteBuf<T> buf = newByteBuf(maxCapacity);
+
+        /*
+         * 真正为这个buf分配内存，就是将这 buf 的相关指针、属性等指向已经分配的物理内存的某一段而已
+         */
         allocate(cache, buf, reqCapacity);
+
         return buf;
     }
 
@@ -239,6 +247,7 @@ abstract class PoolArena<T> implements PoolArenaMetric {
      * 由于tiny块的大小只能是16的倍数，所以代码计算出来的索引就是 0,1,2,3,4........31
      */
     static int tinyIdx(int normCapacity) {
+        /* 其实就是除以 16 */
         return normCapacity >>> 4;
     }
 
@@ -267,6 +276,14 @@ abstract class PoolArena<T> implements PoolArenaMetric {
         return (normCapacity & 0xFFFFFE00) == 0;
     }
 
+    /**
+     * one-to-zero:
+     *  这里是分配空间给参数 buf
+     *  1 优先从线程缓存中分配
+     *  2 线程中没有则会新建 chunk，然后完成分诶
+     *  3 注意：这里仅仅是分配，不会将分配的内存缓存在线程中
+     *      这个步骤是在用户主动调用 {@link ByteBuf#release()} 方法之后才会判断是否需要添加到缓存中
+     */
     private void allocate(PoolThreadCache cache, PooledByteBuf<T> buf, final int reqCapacity) {
         /* 根据请求参数buf大小计算需要分配的真实值 */
         final int normCapacity = normalizeCapacity(reqCapacity);
@@ -838,8 +855,14 @@ abstract class PoolArena<T> implements PoolArenaMetric {
 
         @Override
         protected PooledByteBuf<byte[]> newByteBuf(int maxCapacity) {
-            return HAS_UNSAFE ? PooledUnsafeHeapByteBuf.newUnsafeInstance(maxCapacity)
-                    : PooledHeapByteBuf.newInstance(maxCapacity);
+            /*
+             * 这里可以理解是仅仅获取一个 ByteBuf 而已，但是仅仅是个 buf，里面没有分配内存，因为内存都是在 Chunk 中
+             * 因为netty虽然采用了内存池，但是那仅仅是重用内存，这里则是采用了对象池，也就是一个对象其实是映射一段已分配的物理内存
+             * 对象buf <-> 物理内存某一段
+             * 我们用的就是 buf，这个buf会控制自己的读写指针，指向对应的物理内存
+             * 这个 buf 用完之后，netty不会交给JVM-GC，而是通过对象池 Recycler 将之缓存起来
+             */
+            return HAS_UNSAFE ? PooledUnsafeHeapByteBuf.newUnsafeInstance(maxCapacity) : PooledHeapByteBuf.newInstance(maxCapacity);
         }
 
         @Override
@@ -916,6 +939,13 @@ abstract class PoolArena<T> implements PoolArenaMetric {
 
         @Override
         protected PooledByteBuf<ByteBuffer> newByteBuf(int maxCapacity) {
+            /*
+             * 这里可以理解是仅仅获取一个 ByteBuf 而已，但是仅仅是个 buf，里面没有分配内存，因为内存都是在 Chunk 中
+             * 因为netty虽然采用了内存池，但是那仅仅是重用内存，这里则是采用了对象池，也就是一个对象其实是映射一段已分配的物理内存
+             * 对象buf <-> 物理内存某一段
+             * 我们用的就是 buf，这个buf会控制自己的读写指针，指向对应的物理内存
+             * 这个 buf 用完之后，netty不会交给JVM-GC，而是通过对象池 Recycler 将之缓存起来
+             */
             if (HAS_UNSAFE) {
                 return PooledUnsafeDirectByteBuf.newInstance(maxCapacity);
             } else {

@@ -17,6 +17,7 @@ package io.netty.channel;
 
 import static io.netty.util.internal.ObjectUtil.checkPositive;
 
+import io.netty.buffer.AbstractByteBufAllocator;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.util.UncheckedBooleanSupplier;
@@ -111,6 +112,10 @@ public abstract class DefaultMaxMessagesRecvByteBufAllocator implements MaxMessa
 
         @Override
         public ByteBuf allocate(ByteBufAllocator alloc) {
+            /**
+             * 进入 {@link AdaptiveRecvByteBufAllocator.HandleImpl#guess()}
+             * {@link AbstractByteBufAllocator#ioBuffer()}
+             */
             return alloc.ioBuffer(guess());
         }
 

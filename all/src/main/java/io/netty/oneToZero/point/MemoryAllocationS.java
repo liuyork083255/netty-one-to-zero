@@ -1,5 +1,6 @@
 package io.netty.oneToZero.point;
 
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
 
@@ -9,6 +10,14 @@ import io.netty.buffer.Unpooled;
  *      Page: 内存页，一个单位的内存大小。Chunk 将自身申请的连续内存空间分割成相等大小的一堆 Page。通过对 Page 的分配来完成内存分配功能。 默认 8K
  *      PooledChunkList: 将有相同使用率区间的 Chunk 集中在一起形成的一个 Chunk 列表。目的在于高效的分配和管理。
  *      Arena: 竞技场，作为内存分配的总体入口，所有的内存分配动作都在这个类中对外提供。
+ *
+ * 相关核心类：
+ *      {@link PooledByteBufAllocator}
+ *      {@link io.netty.buffer.PoolArena}
+ *      {@link io.netty.buffer.PoolChunk}
+ *      {@link io.netty.buffer.PoolSubpage}
+ *      {@link io.netty.buffer.PoolChunkList}
+ *      {@link io.netty.buffer.PoolThreadCache}
  *
  *  Netty 内存分配包括了 堆内存和非堆内存 两类
  *
@@ -33,6 +42,9 @@ import io.netty.buffer.Unpooled;
  *
  *  内存分配算法 Buddy
  *      Buddy 分配是把一块内存块等量分割回收时候进行合并，尽可能保证系统中有足够大的连续内存
+ *  内存分配算法 Slab
+ *      Slab 其实是 Buddy 的一种弥补，因为 Buddy 均分出来的page都比较大，如果申请一小块每次给的都是page，就很浪费，所以 Slab 细分，
+ *      但是 Slab 的最核心思想还是缓存，netty 中使用的 PoolChunk PoolSubpage 实现，通过 PoolArena 来管理
  *
  *
  *  物理内存分配是以 chunk 为单位进行申请的，{@link io.netty.buffer.PoolArena#allocateNormal}，
@@ -46,12 +58,15 @@ import io.netty.buffer.Unpooled;
  *  {@link io.netty.buffer.UnpooledUnsafeDirectByteBuf#buffer}
  *
  *
- *
- *
- *
- *
- *
- *
  */
 public class MemoryAllocationS {
+
+    public void fun1() {
+        PooledByteBufAllocator allocator = PooledByteBufAllocator.DEFAULT;
+
+        ByteBuf heapBuffer = allocator.heapBuffer();
+
+
+    }
+
 }

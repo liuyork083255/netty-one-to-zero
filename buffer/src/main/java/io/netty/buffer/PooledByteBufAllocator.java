@@ -44,7 +44,7 @@ import java.util.concurrent.TimeUnit;
  *      Chunk: 内存块，一个连续内存空间的管理者。具体有堆内 Chunk 和堆外 Chunk。默认大小为16MB。它是由一个或者多个 page 构成，默认 2048 个 page
  *      Page: 内存页，一个单位的内存大小。Chunk 将自身申请的连续内存空间分割成相等大小的一堆 Page。通过对 Page 的分配来完成内存分配功能。 默认 8K
  *      PooledChunkList: 将有相同使用率区间的 Chunk 集中在一起形成的一个 Chunk 列表。目的在于高效的分配和管理。
- *      Arena: 竞技场，作为内存分配的总体入口，所有的内存分配动作都在这个类中对外提供。
+ *      Arena: 竞技场，作为内存分配的总体入口，所有的内存分配动作都在这个类中对外提供。这个 Arena 的个数默认和 IO 线程个数相同，即一个线程对应一个 Arena
  *
  * 该类一被加载就会完成初始化 {@link PooledByteBufAllocator#DEFAULT}
  *
@@ -202,8 +202,12 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
 
     /**
      * 用户一般都是创建buf 都是堆内存，采用 {@link Unpooled}
-     * 而 netty 不建议使用池化buf，如果需要使用，则实例化就是通过下面默认创建的实例
+     * 而 netty 不建议使用池化buf（原因是netty内部访问池化同时通过IO线程，由于Arena个数默认和线程个数相同，所以如果此时多了用户线程，那么就无法一一对应了），
+     * 如果需要使用，则实例化就是通过下面默认创建的实例
      * PlatformDependent.directBufferPreferred() 在windows 默认返回 false，也就是默认创建堆内存，而不是直接内存
+     *
+     * PooledByteBufAllocator 的实例化，详见 {@link PooledByteBufAllocator} 以及构造方法
+     *
      */
     public static final PooledByteBufAllocator DEFAULT = new PooledByteBufAllocator(PlatformDependent.directBufferPreferred());
 
@@ -403,7 +407,7 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
 
     @Override
     protected ByteBuf newHeapBuffer(int initialCapacity, int maxCapacity) {
-        /* 获取内存空间优先从线程缓存中获取 */
+        /* 获取内存空间优先从线程缓存中获取，如果此时 PoolThreadCache 为空，则会为当前线程新建 cache */
         PoolThreadCache cache = threadCache.get();
         PoolArena<byte[]> heapArena = cache.heapArena;
 
@@ -569,6 +573,9 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
             threadCache.free(false);
         }
 
+        /**
+         * 通过一定的规则从所有的 Arena 中获取一个
+         */
         private <T> PoolArena<T> leastUsedArena(PoolArena<T>[] arenas) {
             if (arenas == null || arenas.length == 0) {
                 return null;
@@ -577,6 +584,11 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
             PoolArena<T> minArena = arenas[0];
             for (int i = 1; i < arenas.length; i++) {
                 PoolArena<T> arena = arenas[i];
+                /*
+                 * numThreadCaches 默认都是0，如果一个线程获取 arena 之后，numThreadCaches 会 +1
+                 * 也就保证了尽可能不同的线程获取不同的 arena
+                 * arenas 默认个数是 cpu*2，当然：如果worker启动指定了m线程，比如m=2，那么其实 arenas 中只会用到2个，剩余的都是空闲的，仅仅是创建了类，但是底层内存并没有分配
+                 */
                 if (arena.numThreadCaches.get() < minArena.numThreadCaches.get()) {
                     minArena = arena;
                 }
