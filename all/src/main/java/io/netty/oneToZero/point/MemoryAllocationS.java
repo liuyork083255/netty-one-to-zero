@@ -1,5 +1,8 @@
 package io.netty.oneToZero.point;
 
+import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.buffer.Unpooled;
+
 /**
  * 名词定义：
  *      Chunk: 内存块，一个连续内存空间的管理者。具体有堆内 Chunk 和堆外 Chunk。默认大小为16MB。它是由一个或者多个 page 构成，默认 2048 个 page
@@ -35,8 +38,12 @@ package io.netty.oneToZero.point;
  *  物理内存分配是以 chunk 为单位进行申请的，{@link io.netty.buffer.PoolArena#allocateNormal}，
  *  也就是每次都是真实分配物理内存大小为 chunkSize，是一块连续的空间，然后 page subPage 进行各自的划分，管理着自己的内存下标位置
  *
- *
- *
+ *  通过 {@link PooledByteBufAllocator#DEFAULT} 可以获取池化堆内存或者直接内存，返回的对象分别是：PooledUnsafeHeapByteBuf 或者 PooledUnsafeDirectByteBuf；
+ *  通过 {@link Unpooled} 可以获取非池化的堆内存或者直接内存，返回的对象分别是：InstrumentedUnpooledUnsafeHeapByteBuf 或者 InstrumentedUnpooledUnsafeNoCleanerDirectByteBuf
+ *  经过分析，池化的内存真正存储的位置其实是 {@link io.netty.buffer.PoolChunk#memory}，所以池化的buf真正存储就是这个 memory，因为它们都是继承 {@link io.netty.buffer.PooledByteBuf}，
+ *  而 {@link io.netty.buffer.PooledByteBuf#memory} 就是真正存储的物理内存，实际上就是对应的 {@link io.netty.buffer.PoolChunk#memory}
+ *  如果是非池化的 buf，则他们分别继承 UnpooledHeapByteBuf 和 UnpooledUnsafeDirectByteBuf，它们各自存储的对应就是 {@link io.netty.buffer.UnpooledHeapByteBuf#array} 和
+ *  {@link io.netty.buffer.UnpooledUnsafeDirectByteBuf#buffer}
  *
  *
  *

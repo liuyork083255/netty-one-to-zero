@@ -29,7 +29,9 @@ import java.nio.ByteOrder;
  *      如果是 堆内存则采用 byte[]
  *      如果是 对外存则采用 Java NIO ByteBuffer
  *
- *  不管是哪一类存储，它们的存储对象都是 {@link #memory}
+ *  通过 {@link PooledByteBufAllocator#DEFAULT} 获取堆内存或者是直接内存，返回的对象分别是：PooledUnsafeHeapByteBuf 或者 PooledUnsafeDirectByteBuf
+ *  这两个类都是继承这个类 {@link PooledByteBuf}，而 {@link PooledByteBuf#memory} 就是真正存储的物理内存，实际上就是对应的 {@link PoolChunk#memory}，
+ *  这不过各自会记录当前的buf存储在 {@link PoolChunk#memory} 中的位置，也就是 大小，偏移量等等信息
  *
  */
 abstract class PooledByteBuf<T> extends AbstractReferenceCountedByteBuf {
