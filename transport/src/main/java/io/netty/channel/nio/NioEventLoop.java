@@ -76,6 +76,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  *
  */
+@SuppressWarnings("all")
 public final class NioEventLoop extends SingleThreadEventLoop {
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(NioEventLoop.class);

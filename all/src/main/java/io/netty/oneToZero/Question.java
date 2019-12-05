@@ -23,5 +23,11 @@ package io.netty.oneToZero;
  *   3 后置队列（tailTasks）  {@link io.netty.channel.SingleThreadEventLoop#tailTasks}
  * */
 
+/**
+ * netty 重连接可以参考: https://blog.csdn.net/qq_26486685/article/details/80686191
+ */
+
+
+@SuppressWarnings("all")
 public class Question {
 }

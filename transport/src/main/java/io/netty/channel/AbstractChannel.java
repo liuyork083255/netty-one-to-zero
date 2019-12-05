@@ -19,6 +19,7 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.nio.AbstractNioChannel;
 import io.netty.channel.socket.ChannelOutputShutdownEvent;
 import io.netty.channel.socket.ChannelOutputShutdownException;
+import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.DefaultAttributeMap;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.internal.PlatformDependent;
@@ -776,6 +777,9 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
         private void doClose0(ChannelPromise promise) {
             try {
+                /**
+                 * {@link NioSocketChannel#doClose()}
+                 */
                 doClose();
                 closeFuture.setClosed();
                 safeSetSuccess(promise);

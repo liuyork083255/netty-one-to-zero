@@ -58,6 +58,9 @@ public interface RecvByteBufAllocator {
          * </p>
          * This is only ever a hint and may be ignored by the implementation.
          * @param config The channel configuration which may impact this object's behavior.
+         *
+         * otz:
+         *  应该是每次计算消息体大小，然后下次好自动分配能装载的 byteBuf
          */
         void reset(ChannelConfig config);
 

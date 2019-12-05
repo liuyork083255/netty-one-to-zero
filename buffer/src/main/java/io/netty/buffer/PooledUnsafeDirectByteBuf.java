@@ -280,12 +280,12 @@ final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
 
     @Override
     public int setBytes(int index, ScatteringByteChannel in, int length) throws IOException {
-        System.out.println("======================== 防止重复代码警告 =========================");
         checkIndex(index, length);
         ByteBuffer tmpBuf = internalNioBuffer();
         index = idx(index);
         tmpBuf.clear().position(index).limit(index + length);
         try {
+            /* java 源码读取数据到临时的 buf */
             return in.read(tmpBuf);
         } catch (ClosedChannelException ignored) {
             return -1;

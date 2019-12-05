@@ -158,6 +158,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
                         // nothing was read. release the buffer.
                         byteBuf.release();
                         byteBuf = null;
+                        // TODO: 2019/12/4  测试发现，服务端通过这里是如何判断客户端连接断开的？
                         close = allocHandle.lastBytesRead() < 0;
                         if (close) {
                             // There is nothing left to read as we received an EOF.

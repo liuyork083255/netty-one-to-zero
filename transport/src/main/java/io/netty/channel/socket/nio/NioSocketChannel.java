@@ -348,12 +348,14 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
     @Override
     protected void doClose() throws Exception {
         super.doClose();
+        /* 进入 close 方法，完成 CLOSE_WAIT 状态到 CLOSED 状态 */
         javaChannel().close();
     }
 
     @Override
     protected int doReadBytes(ByteBuf byteBuf) throws Exception {
         final RecvByteBufAllocator.Handle allocHandle = unsafe().recvBufAllocHandle();
+        /* byteBuf.writableBytes() 返回可以写入的字节数，一般情况 byteBuf 的大小都是 1024，所以返回 1024 */
         allocHandle.attemptedBytesRead(byteBuf.writableBytes());
         /**
          * 进入 {@link io.netty.buffer.AbstractByteBuf#writeBytes(ScatteringByteChannel, int)}
