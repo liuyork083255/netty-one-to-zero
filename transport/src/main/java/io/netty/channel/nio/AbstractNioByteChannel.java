@@ -127,7 +127,11 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
             }
         }
 
+        /**
+         * worker
+         */
         @Override
+        @SuppressWarnings("all")
         public final void read() {
             final ChannelConfig config = config();
             if (shouldBreakReadReady(config)) {
@@ -154,11 +158,10 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
                      */
                     allocHandle.lastBytesRead(doReadBytes(byteBuf));
                     if (allocHandle.lastBytesRead() <= 0) {
-                        System.out.println("========================由于重复代码所以自己加一点防止警告线=========================");
                         // nothing was read. release the buffer.
                         byteBuf.release();
                         byteBuf = null;
-                        // TODO: 2019/12/4  测试发现，服务端通过这里是如何判断客户端连接断开的？
+                        // TODO: 2019/6/4  测试发现，服务端通过这里是如何判断客户端连接断开的？
                         close = allocHandle.lastBytesRead() < 0;
                         if (close) {
                             // There is nothing left to read as we received an EOF.

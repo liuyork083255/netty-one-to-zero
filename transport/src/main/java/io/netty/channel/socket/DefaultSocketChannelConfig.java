@@ -313,6 +313,9 @@ public class DefaultSocketChannelConfig extends DefaultChannelConfig
 
     @Override
     public SocketChannelConfig setAutoRead(boolean autoRead) {
+        /**
+         * {@link DefaultChannelConfig#setAutoRead(boolean)}
+         */
          super.setAutoRead(autoRead);
         return this;
     }

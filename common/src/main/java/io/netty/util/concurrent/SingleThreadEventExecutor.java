@@ -85,6 +85,10 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
             AtomicReferenceFieldUpdater.newUpdater(
                     SingleThreadEventExecutor.class, ThreadProperties.class, "threadProperties");
 
+    /**
+     * 这里任务是IO线程自己提交的和用户提交的任务，需要由 IO 线程负责执行，
+     * 所以在提交任务后，必须立马唤醒 IO 线程 {@link #execute(Runnable)}
+     */
     private final Queue<Runnable> taskQueue;
 
     /**
@@ -850,6 +854,10 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         return isTerminated();
     }
 
+    /**
+     * 提交任务到 IO 线程中，说明
+     * @param task
+     */
     @Override
     public void execute(Runnable task) {
         if (task == null) {
@@ -881,6 +889,10 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
             }
         }
 
+        /**
+         * 1 判断是否添加任务就立即唤醒 IO 线程
+         * 2 判断任务类型是否为不唤醒类型，这类说明不重要
+         */
         if (!addTaskWakesUp && wakesUpForTask(task)) {
             wakeup(inEventLoop);
         }

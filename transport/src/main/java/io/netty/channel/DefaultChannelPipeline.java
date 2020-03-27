@@ -1433,6 +1433,12 @@ public class DefaultChannelPipeline implements ChannelPipeline {
          *
          * 如果设置 auto-read 为 false，则下面这个方法不会被调用
          *
+         * 如果用户在 handler 中调用了 {@link io.netty.channel.socket.DefaultSocketChannelConfig#setAutoRead(boolean)} 为 false，
+         * 那么 {@link io.netty.channel.nio.AbstractNioByteChannel.NioByteUnsafe#read()} finally 代码块 中的 removeOps 就会被执行，
+         * 也就是将当前的 channel 读事件给取消了，意味着以后有数据发送过来，也不会触发 read 操作，
+         * 那用户取消了以后，如何重新开启读取呢，只需要调用 {@link io.netty.channel.socket.DefaultSocketChannelConfig#setAutoRead(boolean)} 为 true 即可
+         * netty 会在为 true 的时候，主动执行  channel.read();
+         *
          */
         @Override
         public void read(ChannelHandlerContext ctx) {
