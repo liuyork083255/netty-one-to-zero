@@ -41,6 +41,9 @@ import java.util.concurrent.ThreadFactory;
  *
  * 核心代码觉得是 {@link this#newChild} 方法，创建group中的每一个真实线程
  *
+ * 在创建 NioEventLoopGroup 实例的时候，其实就会创建好多对应个数的 NioEventLoop 对象，但是里面的线程是没有启动的，
+ * 线程启动都是通过提交任务，然后触发 executor 创建一个线程，并且将整个线程赋值给 {@link NioEventLoop#thread}
+ *
  */
 public class NioEventLoopGroup extends MultithreadEventLoopGroup {
 

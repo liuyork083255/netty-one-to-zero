@@ -230,6 +230,14 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         return addLast(null, name, handler);
     }
 
+    /**
+     * 添加 handler 的时候，首先直接添加到链表中
+     * 然后判断当前 pipeline 对应的 channel 是否已经注册到 eventLoop 上
+     * 如果注册:
+     *      判断是否是 io 线程，决定同步或者异步提交任务，调用 handlerAdd 方法
+     * 如果没注册:
+     *      则添加一个 handlerCallback 任务，这个任务会在 channel 注册之后回调这个 task
+     */
     @Override
     public final ChannelPipeline addLast(EventExecutorGroup group, String name, ChannelHandler handler) {
         final AbstractChannelHandlerContext newCtx;
@@ -638,6 +646,8 @@ public class DefaultChannelPipeline implements ChannelPipeline {
      *   2 校验这个 handler 是否是被 @Sharable 注解修饰
      *   3 校验这个 handler 是否曾经被添加过
      *   4 设置这个 handler 添加状态 added 为 true
+     * 注意:
+     *  如果添加的 handler 没有被 @Sharable 标注，那么再被添加一次后，会抛出下面异常
      */
     private static void checkMultiplicity(ChannelHandler handler) {
         if (handler instanceof ChannelHandlerAdapter) {
@@ -1185,6 +1195,10 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         }
     }
 
+    /**
+     *
+     * @param added true: , false:
+     */
     private void callHandlerCallbackLater(AbstractChannelHandlerContext ctx, boolean added) {
         assert !registered;
 

@@ -91,6 +91,7 @@ public abstract class MultithreadEventLoopGroup extends MultithreadEventExecutor
     @Override
     public ChannelFuture register(Channel channel) {
         /**
+         * next() 则是从 childWorker 中获取一个线程
          * {@link io.netty.channel.SingleThreadEventLoop#register(Channel)}
          */
         return next().register(channel);

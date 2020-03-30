@@ -42,6 +42,9 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
      *  boss group 在父类 {@link AbstractBootstrap#group} 中
      */
     private volatile EventLoopGroup childGroup;
+    /**
+     * 这个一般就是添加 worker 的 {@link ChannelInitializer}
+     */
     private volatile ChannelHandler childHandler;
 
     public ServerBootstrap() { }
@@ -171,6 +174,9 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
          *  在 >= 4.1 版本中，Channel.attr == ChannelHandlerContext.attr
          *  早期的 4.0 之前，每一个 ChannelHandlerContext 都会维护一个 attrMap
          *
+         * 也就是老版本前 context 中会有一个 attr，不同 handler 之间是不能共享这个 attr 的
+         * 但是在高版本之后，context 中不存在这个 attr，但是方法还是保留，并且直接返回 channel 的 attr
+         * 所以在高版本中，只有一个 channel 的 attr 了，并且是整个 channel 中的 handler 共享
          */
         final Map<AttributeKey<?>, Object> attrs = attrs0();
         synchronized (attrs) {
@@ -189,6 +195,7 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
         ChannelPipeline p = channel.pipeline();
 
         final EventLoopGroup currentChildGroup = childGroup;
+        /* 初始化 worker handler  ChannelInitializer 对象 */
         final ChannelHandler currentChildHandler = childHandler;
         final Entry<ChannelOption<?>, Object>[] currentChildOptions;
         final Entry<AttributeKey<?>, Object>[] currentChildAttrs;
@@ -358,6 +365,7 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
             /**
              * 先将 {@link ChannelInitializer} 添加到 pipeline 中，注册完成之后，会调用 ChannelInitializer 的 handlerAdded 方法
+             * 这里添加 childHandler 其实和 boss 一样的逻辑，先添加一个 ChannelInitializer，然后在 ChannelInitializer 里面添加 真正的 handler
              */
             child.pipeline().addLast(childHandler);
 

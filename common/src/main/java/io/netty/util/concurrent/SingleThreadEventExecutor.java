@@ -97,6 +97,14 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     private volatile Thread thread;
     @SuppressWarnings("unused")
     private volatile ThreadProperties threadProperties;
+
+    /**
+     * 这个 executor 就是在 NioEventLoopGroup boss = new NioEventLoopGroup(1) 创建的时候会设置
+     * 并且 new NioEventLoopGroup(1) 不是是 boss 还是 worker，都会一次性将 NioEventLoop 对应的个数全部创建完成，
+     * 但是里面的 NioEventLoop 的 thread 则不会启动，它的启动一定是通过调用 {@link #execute} 这个方法提交任务，只有第一次
+     * 提交任务的时候才会
+     *
+     */
     private final Executor executor;
     /**
      * 标记IO 线程是否被标记为中断

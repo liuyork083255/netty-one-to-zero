@@ -91,6 +91,18 @@ import java.util.Set;
  *     }
  * }
  * </pre>
+ *
+ *
+ * otz:
+ *  ChannelGroup 是 netty 提供用于管理 channel 连接的辅助类，并且线程安全
+ *  比如用于可以通过这个 ChannelGroup 保存各种 channel 集合，可以统计总数，可以按分类统计到不同的 ChannelGroup 中
+ *  所以一个 channel 可以被添加到多个 ChannelGroup 中
+ *
+ *  并且用户不用担心 channel 被关闭的状态，因为 netty 会自动移除
+ *
+ *  用户可以在自己的 handler 中创建一个静态 ChannelGroup group = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE)
+ *  然后在 channel 建立连接后就可以添加 channel
+ *
  */
 public interface ChannelGroup extends Set<Channel>, Comparable<ChannelGroup> {
 

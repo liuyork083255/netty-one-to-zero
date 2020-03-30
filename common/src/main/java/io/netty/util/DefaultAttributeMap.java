@@ -22,6 +22,16 @@ import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 /**
  * Default {@link AttributeMap} implementation which use simple synchronization per bucket to keep the memory overhead
  * as low as possible.
+ *
+ * nio channel 会继承这个类，所以每个 channel 都会拥有一个 {@link #attributes} 对象
+ *
+ *  在 >= 4.1 版本中，Channel.attr == ChannelHandlerContext.attr
+ *  早期的 4.0 之前，每一个 ChannelHandlerContext 都会维护一个 attrMap
+ *
+ * 也就是老版本前 context 中会有一个 attr，不同 handler 之间是不能共享这个 attributes 的
+ * 但是在高版本之后，context 中不存在这个 attr，但是方法还是保留，并且直接返回 channel 的 attributes
+ * 所以在高版本中，只有一个 channel 的 attr 了，并且整个 channel 中的 handler 共享这个 attributes
+ *
  */
 public class DefaultAttributeMap implements AttributeMap {
 

@@ -105,6 +105,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
              *  获取默认线程工厂:
              *      调用 MultithreadEventLoopGroup 类的 newDefaultThreadFactory 方法创建 DefaultThreadFactory
              *
+             * 这个 executor 就是用于创建 {@link io.netty.channel.nio.NioEventLoop#thread}
              */
             executor = new ThreadPerTaskExecutor(newDefaultThreadFactory());
         }
@@ -118,6 +119,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
                 /**
                  * one-to-zero:
                  * 调用 NioEventLoopGroup 类的 newChild 方法创建 {@link io.netty.channel.nio.NioEventLoop} 对象
+                 * 进入 {@link io.netty.channel.nio.NioEventLoopGroup#newChild(Executor, Object...)}
                  */
                 children[i] = newChild(executor, args);
 

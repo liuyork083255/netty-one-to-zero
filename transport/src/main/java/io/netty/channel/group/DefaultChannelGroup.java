@@ -140,6 +140,7 @@ public class DefaultChannelGroup extends AbstractSet<Channel> implements Channel
             channel instanceof ServerChannel? serverChannels : nonServerChannels;
 
         boolean added = map.putIfAbsent(channel.id(), channel) == null;
+        /* 添加成功后，注册一个监听器，所以 ChannelGroup 才能自动在 channel 断开连接后移除 */
         if (added) {
             channel.closeFuture().addListener(remover);
         }
