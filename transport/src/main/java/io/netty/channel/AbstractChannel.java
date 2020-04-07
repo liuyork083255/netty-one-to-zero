@@ -40,14 +40,36 @@ import java.util.concurrent.RejectedExecutionException;
 
 /**
  * A skeletal {@link Channel} implementation.
+ *
+ * 客户端和服务端 channel 都是继承 AbstractChannel
+ *  client: {@link NioSocketChannel#newUnsafe()}
+ *  server: {@link io.netty.channel.socket.nio.NioServerSocketChannel#newUnsafe()}
+ *
+ *
+ *
  */
 public abstract class AbstractChannel extends DefaultAttributeMap implements Channel {
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(AbstractChannel.class);
 
+    /**
+     * 在接入和读写流程中没有使用到
+     * NioSocketChannel 中是指向 NioServerSocketChannel
+     * NioServerSocketChannel 中是指向 null
+     */
     private final Channel parent;
     private final ChannelId id;
+    /**
+     * NioEventLoop 接收到事件后，就会调用 Unsafe.read 操作
+     * 在不同的 channel 实现，返回的对象不同
+     * client: {@link NioSocketChannel#newUnsafe()}
+     * server: {@link io.netty.channel.socket.nio.NioServerSocketChannel#newUnsafe()}
+     *
+     */
     private final Unsafe unsafe;
+    /**
+     * 创建 channel 的时候创建 pipeline
+     */
     private final DefaultChannelPipeline pipeline;
     private final VoidChannelPromise unsafeVoidPromise = new VoidChannelPromise(this, false);
     private final CloseFuture closeFuture = new CloseFuture(this);
@@ -72,6 +94,12 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
     protected AbstractChannel(Channel parent) {
         this.parent = parent;
         id = newId();
+        /**
+         * NioEventLoop 接收到事件后，就会调用 Unsafe.read 操作
+         * 在不同的 channel 实现，返回的对象不同
+         * client: {@link NioSocketChannel#newUnsafe()}
+         * server: {@link io.netty.channel.socket.nio.NioServerSocketChannel#newUnsafe()}
+         */
         unsafe = newUnsafe();
         pipeline = newChannelPipeline();
     }
@@ -332,6 +360,11 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
     /**
      * Create a new {@link AbstractUnsafe} instance which will be used for the life-time of the {@link Channel}
+     * otz:
+     *  NioEventLoop 接收到事件后，就会调用 Unsafe.read 操作
+     *  在不同的 channel 实现，返回的对象不同
+     *  client: {@link NioSocketChannel#newUnsafe()}
+     *  server: {@link io.netty.channel.socket.nio.NioServerSocketChannel#newUnsafe()}
      */
     protected abstract AbstractUnsafe newUnsafe();
 
@@ -465,16 +498,18 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 return;
             }
 
+            /* channel 也持有了 io NioEventLoop */
             AbstractChannel.this.eventLoop = eventLoop;
 
             /**
              * one-to-zero:
-             *  boss 启动的时候，流出也会到这里，由于 boss 启动注册线程是 main 线程，所以分支会进入 else
+             *  if 分支基本不会进入，因为 boss 注册是 main 线程，worker 注册是 boss 线程
              */
             if (eventLoop.inEventLoop()) {
                 register0(promise);
             } else {
                 try {
+                    /* 所以 nio 线程启动基本都是在这里触发的，注册提交任务，启动线程 */
                     eventLoop.execute(new Runnable() {
                         @Override
                         public void run() {
@@ -571,6 +606,9 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
             boolean wasActive = isActive();
             try {
+                /**
+                 * {@link io.netty.channel.socket.nio.NioServerSocketChannel#doBind}
+                 */
                 doBind(localAddress);
             } catch (Throwable t) {
                 safeSetFailure(promise, t);
@@ -578,6 +616,9 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 return;
             }
 
+            /**
+             * server 启动这个步骤很关键，因为会层层进入然后调用修改 register 事件为 accept 事件
+             */
             if (!wasActive && isActive()) {
                 invokeLater(new Runnable() {
                     @Override
@@ -864,6 +905,9 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             }
 
             try {
+                /**
+                 * server 启动会调用这个方法将 register 由 0 改为 accept = 16 {@link }
+                 */
                 doBeginRead();
             } catch (final Exception e) {
                 invokeLater(new Runnable() {

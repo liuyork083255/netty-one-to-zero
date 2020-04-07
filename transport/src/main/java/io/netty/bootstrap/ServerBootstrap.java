@@ -29,6 +29,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * {@link Bootstrap} sub-class which allows easy bootstrap of {@link ServerChannel}
  *
+ * client 和 server 注册代码都是在 ServerBootstrap 类中
  */
 public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerChannel> {
 
@@ -378,10 +379,7 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
             try {
                 /**
                  * one-to-zero:
-                 *  1 进入 {@link io.netty.channel.MultithreadEventLoopGroup#register(Channel)}
-                 *
-                 *
-                 *
+                 *  进入 {@link io.netty.channel.MultithreadEventLoopGroup#register(Channel)}
                  *
                  */
                 childGroup.register(child).addListener(new ChannelFutureListener() {

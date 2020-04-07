@@ -120,6 +120,9 @@ public class ChannelOption<T> extends AbstractConstant<ChannelOption<T>> {
     public static final ChannelOption<Integer> SO_RCVBUF = valueOf("SO_RCVBUF");
     public static final ChannelOption<Boolean> SO_REUSEADDR = valueOf("SO_REUSEADDR");
     public static final ChannelOption<Integer> SO_LINGER = valueOf("SO_LINGER");
+    /**
+     * 在服务端 io 线程都在忙碌时，有链接接入的最大值
+     */
     public static final ChannelOption<Integer> SO_BACKLOG = valueOf("SO_BACKLOG");
     public static final ChannelOption<Integer> SO_TIMEOUT = valueOf("SO_TIMEOUT");
 

@@ -44,7 +44,7 @@ import java.util.concurrent.TimeUnit;
  *      Chunk: 内存块，一个连续内存空间的管理者。具体有堆内 Chunk 和堆外 Chunk。默认大小为16MB。它是由一个或者多个 page 构成，默认 2048 个 page
  *      Page: 内存页，一个单位的内存大小。Chunk 将自身申请的连续内存空间分割成相等大小的一堆 Page。通过对 Page 的分配来完成内存分配功能。 默认 8K
  *      PooledChunkList: 将有相同使用率区间的 Chunk 集中在一起形成的一个 Chunk 列表。目的在于高效的分配和管理。
- *      Arena: 竞技场，作为内存分配的总体入口，所有的内存分配动作都在这个类中对外提供。这个 Arena 的个数默认和 IO 线程个数相同，即一个线程对应一个 Arena
+ *      Arena: 作为内存分配的总体入口，所有的内存分配动作都在这个类中对外提供。这个 Arena 的个数默认和 IO 线程个数相同，即一个线程对应一个 Arena
  *
  * 该类一被加载就会完成初始化 {@link PooledByteBufAllocator#DEFAULT}
  *
@@ -53,10 +53,10 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(PooledByteBufAllocator.class);
 
-    /** 默认堆内存类型 PoolArena 个数 默认16 */
+    /** 默认堆内存类型 PoolArena 个数 */
     private static final int DEFAULT_NUM_HEAP_ARENA;
 
-    /** 默认直接内存类型 PoolArena 个数 默认16 */
+    /** 默认直接内存类型 PoolArena 个数 */
     private static final int DEFAULT_NUM_DIRECT_ARENA;
 
     /** 每一页 page 默认大小 1024 * 8 = 8192 = 8k */

@@ -48,6 +48,7 @@ import java.nio.channels.ScatteringByteChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.spi.SelectorProvider;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 
@@ -110,6 +111,13 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
      *
      * @param parent    the {@link Channel} which created this instance or {@code null} if it was created by the user
      * @param socket    the {@link SocketChannel} which will be used
+     *
+     * otz:
+     *
+     */
+    /**
+     * otz:
+     *  客户端连接 channel，在服务端 server 收到连接请求后，会在 read 操作调用 {@link NioServerSocketChannel#doReadMessages(List)} 创建 NioSocketChannel
      */
     public NioSocketChannel(Channel parent, SocketChannel socket) {
         super(parent, socket);

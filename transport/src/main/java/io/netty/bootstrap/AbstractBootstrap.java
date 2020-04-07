@@ -284,8 +284,8 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
 
     private ChannelFuture doBind(final SocketAddress localAddress) {
         /* 初始化和创建 channel */
-        final ChannelFuture regFuture = initAndRegister();
-        final Channel channel = regFuture.channel();
+        final ChannelFuture regFuture = initAndRegister(); /** {@link DefaultChannelPromise} */
+        final Channel channel = regFuture.channel(); /** {@link io.netty.channel.socket.nio.NioServerSocketChannel} */
         if (regFuture.cause() != null) {
             return regFuture;
         }

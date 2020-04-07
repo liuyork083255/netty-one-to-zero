@@ -139,7 +139,6 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             /**
              * one-to-zero:
              * 如果等于0，表明发生了死循环，也不会重构 selector
-             * 判断逻辑见代码 929 行
              */
             selectorAutoRebuildThreshold = 0;  //one-to-zero: 不需要重构选择器
         }

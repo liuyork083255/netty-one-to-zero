@@ -533,6 +533,9 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     private void invokeBind(SocketAddress localAddress, ChannelPromise promise) {
         if (invokeHandler()) {
             try {
+                /**
+                 * server 启动进入 {@link DefaultChannelPipeline.HeadContext#bind(ChannelHandlerContext, SocketAddress, ChannelPromise)}
+                 */
                 ((ChannelOutboundHandler) handler()).bind(this, localAddress, promise);
             } catch (Throwable t) {
                 notifyOutboundHandlerException(t, promise);

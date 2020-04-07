@@ -121,6 +121,8 @@ public class DefaultChannelPipeline implements ChannelPipeline {
      *      这个方法就会调用 pipeline 里面的所有 handler 的 handlerAdded 方法，
      *      而 {@link ChannelInitializer#handlerAdded(ChannelHandlerContext)} 就实现了这个方法
      *
+     * 理解下来应该是: 通过 pipeline 添加 handler，但是需要 channel 被注册才能添加，所以采用 registered 来标记
+     * 方式用户误操作吧
      */
     private boolean registered;
 
@@ -1398,8 +1400,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         }
 
         @Override
-        public void bind(
-                ChannelHandlerContext ctx, SocketAddress localAddress, ChannelPromise promise) {
+        public void bind(ChannelHandlerContext ctx, SocketAddress localAddress, ChannelPromise promise) {
             unsafe.bind(localAddress, promise);
         }
 
@@ -1510,6 +1511,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         public void channelActive(ChannelHandlerContext ctx) {
             ctx.fireChannelActive();
 
+            /* server 启动后会调用这个方法，然后修改 register 为 accept */
             readIfIsAutoRead();
         }
 

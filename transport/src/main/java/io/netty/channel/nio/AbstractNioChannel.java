@@ -20,6 +20,8 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
+import io.netty.channel.Channel;
+import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.ReferenceCounted;
 import io.netty.util.internal.logging.InternalLogger;
@@ -27,11 +29,7 @@ import io.netty.util.internal.logging.InternalLoggerFactory;
 
 import java.io.IOException;
 import java.net.SocketAddress;
-import java.nio.channels.CancelledKeyException;
-import java.nio.channels.ClosedChannelException;
-import java.nio.channels.ConnectionPendingException;
-import java.nio.channels.SelectableChannel;
-import java.nio.channels.SelectionKey;
+import java.nio.channels.*;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -44,6 +42,10 @@ public abstract class AbstractNioChannel extends AbstractChannel {
             InternalLoggerFactory.getInstance(AbstractNioChannel.class);
 
     private final SelectableChannel ch;
+    /**
+     * 如果是 {@link io.netty.channel.socket.nio.NioServerSocketChannel#NioServerSocketChannel(ServerSocketChannel)}，构造方法传入的是 accept = 16
+     * 如果是 {@link NioSocketChannel#NioSocketChannel(Channel, SocketChannel)}，构造方法传入的是 read = 1
+     */
     protected final int readInterestOp;
     volatile SelectionKey selectionKey;
     boolean readPending;
@@ -403,6 +405,9 @@ public abstract class AbstractNioChannel extends AbstractChannel {
                 /**
                  * one-to-zero:
                  *  这里就是调用 java-nio 来完成注册的代码了
+                 *  但是注册的是一个 0， 表示对任何事件都不感兴趣
+                 *  在 server-channel 注册完成后会调用 bind，然后调用 channelRead 方法，此时将事件改变为 accept
+                 *  {@link io.netty.bootstrap.AbstractBootstrap#doBind0}
                  */
                 selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this);
                 return;
@@ -426,6 +431,15 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         eventLoop().cancel(selectionKey());
     }
 
+    /**
+     * server 和 client 启动的时候都会调用 channelActive，然后继续调用 head-read，最终进入到这里
+     * 将监听事件改为 感兴趣 的事件
+     *
+     * client = read = 1
+     * server = accept = 16
+     *
+     * 因为在 server 和 client 初始化调用 register 时都是注册的 0，表示对任何事件都不感兴趣
+     */
     @Override
     protected void doBeginRead() throws Exception {
         // Channel.read() or ChannelHandlerContext.read() was called

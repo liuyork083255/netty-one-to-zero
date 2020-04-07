@@ -19,7 +19,7 @@ public class OneToZeroMain {
 
         try {
             ServerBootstrap bootstrap = new ServerBootstrap();
-            bootstrap.group(boss, worker).channel(NioServerSocketChannel.class);
+            bootstrap.group(boss, boss).channel(NioServerSocketChannel.class);
 
             /**
              * one-to-zero:
