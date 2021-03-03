@@ -34,7 +34,7 @@ public class OneToZeroMain {
              */
             bootstrap.childHandler(null);
 
-            ChannelFuture cf = bootstrap.bind(12345).sync();
+            ChannelFuture cf = bootstrap.bind(666).sync();
             cf.channel().closeFuture().sync();
         }
         catch (Exception e) {

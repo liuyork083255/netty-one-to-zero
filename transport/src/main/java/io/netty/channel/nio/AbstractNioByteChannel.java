@@ -149,9 +149,14 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
             try {
                 do {
                     /**
+                     * 这里很有意思: 既然是默认分配一个大小，加入客户端发送了2000大小数据，1024不够用这么办？
+                     * netty 首先还是只会读取 1024 数据，并且会调用下面的 fire 方法传递给后面，因为这2000可能是由若干条数据组成，
+                     * 假设消息体就是2000也没关系，先将1024的数据读取交给后面的切割器handler(切割不了自然会缓存)，由于数据此时没有读完，
+                     * selected 轮训事件立马返回，所以又会调用这里的方法接着读
+                     *
                      * 分配池化内存 {@link DefaultMaxMessagesRecvByteBufAllocator.MaxMessageHandle#allocate(ByteBufAllocator)}
                      */
-                    byteBuf = allocHandle.allocate(allocator);
+                    byteBuf = allocHandle.allocate(allocator); // 最先默认分页一个1024大小内存，会动态计算
 
                     /**
                      * 进入 {@link io.netty.channel.socket.nio.NioSocketChannel#doReadBytes(ByteBuf)}

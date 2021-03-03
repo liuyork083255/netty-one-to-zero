@@ -38,7 +38,7 @@ final class PlatformDependent0 {
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(PlatformDependent0.class);
     private static final long ADDRESS_FIELD_OFFSET;
     private static final long BYTE_ARRAY_BASE_OFFSET;
-    private static final Constructor<?> DIRECT_BUFFER_CONSTRUCTOR;
+    private static final Constructor<?> DIRECT_BUFFER_CONSTRUCTOR; // 本质是 DirectByteBuffer 的构造方法
     private static final Throwable EXPLICIT_NO_UNSAFE_CAUSE = explicitNoUnsafeCause0();
     private static final Method ALLOCATE_ARRAY_METHOD;
     private static final int JAVA_VERSION = javaVersion0();
@@ -445,6 +445,9 @@ final class PlatformDependent0 {
         return newDirectBuffer(UNSAFE.reallocateMemory(directBufferAddress(buffer), capacity), capacity);
     }
 
+    /**
+     * 分配内存 UNSAFE.allocateMemory，并返回基地址
+     */
     static ByteBuffer allocateDirectNoCleaner(int capacity) {
         // Calling malloc with capacity of 0 may return a null ptr or a memory address that can be used.
         // Just use 1 to make it safe to use in all cases:

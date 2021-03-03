@@ -43,6 +43,10 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
 
     private static final int[] SIZE_TABLE;
 
+    /**
+     * 16 -> 512 设置设置步长 16
+     * 超过 512 步长 *2， 最大值 1024*1024*1024 = 1073741824
+     */
     static {
         List<Integer> sizeTable = new ArrayList<Integer>();
         for (int i = 16; i < 512; i += 16) {
@@ -118,7 +122,7 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
 
         @Override
         public int guess() {
-            /* 默认大小为 1024 */
+            /* 默认大小为 1024，如果数据一直很小，则该值逐渐递减，反之正大，核心方法就是下面的 record(int actualReadBytes) */
             return nextReceiveBufferSize;
         }
 

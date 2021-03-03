@@ -323,7 +323,7 @@ abstract class PoolArena<T> implements PoolArenaMetric {
                 final PoolSubpage<T> s = head.next;
                 if (s != head) {
                     assert s.doNotDestroy && s.elemSize == normCapacity;
-                    long handle = s.allocate();
+                    long handle = s.allocate(); // handle 指向的是当前 chunk 中的唯一的一块内存
                     assert handle >= 0;
                     s.chunk.initBufWithSubpage(buf, null, handle, reqCapacity);
                     incTinySmallAllocation(tiny);
@@ -448,6 +448,10 @@ abstract class PoolArena<T> implements PoolArenaMetric {
         }
     }
 
+    /**
+     * 根据内存分配大小判断应该返回 tiny 还是 small Subpage 数组头
+     * @param elemSize 其就是根据 reqCapacity 向上首次 2 次幂计算而来
+     */
     PoolSubpage<T> findSubpagePoolHead(int elemSize) {
         int tableIdx;
         PoolSubpage<T>[] table;
@@ -825,6 +829,9 @@ abstract class PoolArena<T> implements PoolArenaMetric {
             super(parent, pageSize, maxOrder, pageShifts, chunkSize, directMemoryCacheAlignment);
         }
 
+        /**
+         * 通过 Unsafe 分配堆内数组 byte[]
+         */
         private static byte[] newByteArray(int size) {
             return PlatformDependent.allocateUninitializedArray(size);
         }
@@ -835,7 +842,7 @@ abstract class PoolArena<T> implements PoolArenaMetric {
         }
 
         /**
-         * 由此可见，物理内存分配其实是以 pageSize 为单位大小进行分配的
+         * 由此可见，物理内存分配其实是以 chunkSize 为单位大小进行分配的
          */
         @Override
         protected PoolChunk<byte[]> newChunk(int pageSize, int maxOrder, int pageShifts, int chunkSize) {
@@ -843,7 +850,7 @@ abstract class PoolArena<T> implements PoolArenaMetric {
         }
 
         /**
-         * 由此可见，物理内存分配其实是以 pageSize 为单位大小进行分配的
+         * 由此可见，物理内存分配其实是以 chunkSize 为单位大小进行分配的
          */
         @Override
         protected PoolChunk<byte[]> newUnpooledChunk(int capacity) {
@@ -902,7 +909,7 @@ abstract class PoolArena<T> implements PoolArenaMetric {
         }
 
         /**
-         * 由此可见，物理内存分配其实是以 pageSize 为单位大小进行分配的
+         * 由此可见，物理内存分配其实是以 chunkSize 为单位大小进行分配的
          */
         @Override
         protected PoolChunk<ByteBuffer> newChunk(int pageSize, int maxOrder,

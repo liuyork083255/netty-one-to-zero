@@ -62,6 +62,16 @@ abstract class PooledByteBuf<T> extends AbstractReferenceCountedByteBuf {
         init0(chunk, null, 0, chunk.offset, length, length, null);
     }
 
+    /**
+     *
+     * @param chunk 这个里面封装着真实的存储对象 byte[] 或者 ByteBuffer，其实每次都是将这个对象传递 page(subpage)，靠的是它们的参数偏移量控制读写地址
+     * @param nioBuffer
+     * @param handle
+     * @param offset 应该存储的开始地址，这个地址是基于整个 T(byte[] 或者 ByteBuffer) 而言
+     * @param length
+     * @param maxLength
+     * @param cache
+     */
     private void init0(PoolChunk<T> chunk, ByteBuffer nioBuffer, long handle, int offset, int length, int maxLength, PoolThreadCache cache) {
         assert handle >= 0;
         assert chunk != null;

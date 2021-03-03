@@ -99,7 +99,7 @@ public final class PlatformDependent {
 
     private static final int ADDRESS_SIZE = addressSize0();
     private static final boolean USE_DIRECT_BUFFER_NO_CLEANER;
-    private static final AtomicLong DIRECT_MEMORY_COUNTER;
+    private static final AtomicLong DIRECT_MEMORY_COUNTER; // 记录直接内存已被申请的容量，通过 DirectArena.destroyChunk 释放内存，HeapArena是GC控制，不维护释放
     private static final long DIRECT_MEMORY_LIMIT;
     private static final ThreadLocalRandomProvider RANDOM_PROVIDER;
     private static final Cleaner CLEANER;
@@ -202,6 +202,9 @@ public final class PlatformDependent {
         return PlatformDependent0.hasDirectBufferNoCleanerConstructor();
     }
 
+    /**
+     * 通过 Unsafe 分配堆内数组内存
+     */
     public static byte[] allocateUninitializedArray(int size) {
         return UNINITIALIZED_ARRAY_ALLOCATION_THRESHOLD < 0 || UNINITIALIZED_ARRAY_ALLOCATION_THRESHOLD > size ?
                 new byte[size] : PlatformDependent0.allocateUninitializedArray(size);
@@ -662,7 +665,7 @@ public final class PlatformDependent {
     private static void incrementMemoryCounter(int capacity) {
         if (DIRECT_MEMORY_COUNTER != null) {
             long newUsedMemory = DIRECT_MEMORY_COUNTER.addAndGet(capacity);
-            if (newUsedMemory > DIRECT_MEMORY_LIMIT) {
+            if (newUsedMemory > DIRECT_MEMORY_LIMIT) { // 判断是否大于了最大直接内存限制
                 DIRECT_MEMORY_COUNTER.addAndGet(-capacity);
                 throw new OutOfDirectMemoryError("failed to allocate " + capacity
                         + " byte(s) of direct memory (used: " + (newUsedMemory - capacity)
@@ -673,7 +676,7 @@ public final class PlatformDependent {
 
     private static void decrementMemoryCounter(int capacity) {
         if (DIRECT_MEMORY_COUNTER != null) {
-            long usedMemory = DIRECT_MEMORY_COUNTER.addAndGet(-capacity);
+            long usedMemory = DIRECT_MEMORY_COUNTER.addAndGet(-capacity); // 这里释放直接内存看来是计数形式的，没有牵涉到真实内存操作
             assert usedMemory >= 0;
         }
     }
@@ -1001,6 +1004,9 @@ public final class PlatformDependent {
         return vmName.equals("IKVM.NET");
     }
 
+    /**
+     * 获取最大直接内存，简单理解是先获取 JVM 参数 maxDirectMemory，如果没有则获取 Runtime.getRuntime().maxMemory()
+     */
     private static long maxDirectMemory0() {
         long maxDirectMemory = 0;
 
